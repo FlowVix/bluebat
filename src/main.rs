@@ -5,12 +5,13 @@ mod value;
 mod interpreter;
 
 use std::{fs, io::{self, Write}};
+use interpreter::ScopeList;
 use logos::Logos;
 
-use crate::{errors::BaseError, interpreter::{Memory, Scope}, lexer::Token, value::Value};
+use crate::{errors::BaseError, interpreter::{Memory}, lexer::Token, value::Value};
 
 
-fn run(code: String, memory: &mut Memory, global_scope: &mut Scope, print_result: bool) {
+fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: bool) {
     let mut tokens = lexer::Token
         ::lexer(&code)
         .collect::<Vec<lexer::Token>>();
@@ -22,7 +23,7 @@ fn run(code: String, memory: &mut Memory, global_scope: &mut Scope, print_result
     match tree {
         Ok((node, _)) => {
             //println!("{:?}",node);
-            let ass = interpreter::start_execute(&node, global_scope, memory);
+            let ass = interpreter::start_execute(&node, scopes, memory);
             if let Ok(interpreter::NodeResult::Value(result)) = ass {
                 if print_result {
                     match result {
@@ -46,18 +47,19 @@ fn main() {
     }
 
     let mut memory = Memory::new();
-    let mut global_scope = Scope::new();
-    global_scope.set_var("sin".to_string(), &mut memory, &Value::Builtin("sin".to_string()), true);
-    global_scope.set_var("cos".to_string(), &mut memory, &Value::Builtin("cos".to_string()), true);
-    global_scope.set_var("tan".to_string(), &mut memory, &Value::Builtin("tan".to_string()), true);
-    global_scope.set_var("print".to_string(), &mut memory, &Value::Builtin("print".to_string()), true);
-
+    let mut scopes = ScopeList::new();
+    
+    scopes.set_var_local("sin".to_string(), 0, &mut memory, &Value::Builtin("sin".to_string()));
+    scopes.set_var_local("cos".to_string(), 0, &mut memory, &Value::Builtin("cos".to_string()));
+    scopes.set_var_local("tan".to_string(), 0, &mut memory, &Value::Builtin("tan".to_string()));
+    scopes.set_var_local("print".to_string(), 0, &mut memory, &Value::Builtin("print".to_string()));
+    
     if true {
         print!("\n----------------------------------------\n\n");
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
         
-        run(input_str, &mut memory, &mut global_scope, false);
+        run(input_str, &mut memory, &mut scopes, false);
         print!("\n----------------------------------------\n\n");
     } else {
 
@@ -78,7 +80,7 @@ BlueBat v0.1.0 Console
             
             let input_str = format!("{}{}",&input_str[..input_str.len()-2],"\n");
     
-            run(input_str, &mut memory, &mut global_scope, true);
+            run(input_str, &mut memory, &mut scopes, true);
             
         }
     }

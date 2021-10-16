@@ -1,4 +1,4 @@
-use crate::{errors::BaseError, interpreter::{Scope, ValueResult}, parser::ASTNode};
+use crate::{errors::BaseError, interpreter::{RegIndex, ValueResult}, parser::ASTNode};
 
 
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub enum Value {
     Bool(bool),
     String(String),
     Builtin(String),
-    Function {arg_names: Vec<String>, code: Box<ASTNode>, scope: Scope},
+    Function {arg_names: Vec<String>, code: Box<ASTNode>, scope_id: RegIndex},
 }
 
 impl Value {
