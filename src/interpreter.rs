@@ -15,15 +15,16 @@ fn ret_value(value: Value) -> ExecuteResult {
     Ok( NodeResult::Value( value ) )
 }
 
-fn derive_scope(scope_id: RegIndex, scopes: &mut ScopeList) -> RegIndex {
+fn derive_scope(scope_id: RegIndex, caller_id: RegIndex, scopes: &mut ScopeList) -> RegIndex {
     scopes.counter += 1;
-    scopes.register.insert( scopes.counter, Scope::new_child(scope_id) );
+    scopes.register.insert( scopes.counter, Scope {parent_id: Some(scope_id), caller_id: Some(caller_id), vars: HashMap::new() } );
     scopes.counter
 }
 
 #[derive(Debug)]
 pub struct Scope {
     parent_id: Option<RegIndex>,
+    caller_id: Option<RegIndex>,
     vars: HashMap<String, RegIndex>,
 }
 
@@ -138,6 +139,11 @@ impl Memory {
             Some(id) => self.mark(scopes, id, tracker),
             None => (),
         }
+        let caller_id = scopes.register.get(&scope_id).unwrap().caller_id;
+        match caller_id {
+            Some(id) => self.mark(scopes, id, tracker),
+            None => (),
+        }
     }
 
 }
@@ -188,10 +194,7 @@ impl ScopeList {
 
 impl Scope {
     pub fn new() -> Self {
-        return Scope {parent_id: None, vars: HashMap::new()};
-    }
-    pub fn new_child(parent_id: RegIndex) -> Self {
-        return Scope {parent_id: Some(parent_id), vars: HashMap::new()};
+        return Scope {parent_id: None, caller_id: None, vars: HashMap::new()};
     }
 }
 
@@ -227,6 +230,7 @@ pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory
 }
 
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ExecuteResult {
+    println!("\n\n{:#?}\nscope_id: {},\n{:#?}",memory,scope_id,scopes);
     memory.collect(scopes, scope_id);
     ret_value( match node {
         ASTNode::Value { value } => extracute!( value, scope_id, memory, scopes ),
@@ -335,7 +339,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
         ASTNode::If { conds, if_none } => {
             for i in conds {
                 if extracute!(&i.0, scope_id, memory, scopes).to_bool()? {
-                    return ret_value(extracute!(&i.1, derive_scope(scope_id, scopes), memory, scopes))
+                    return ret_value(extracute!(&i.1, derive_scope(scope_id, scope_id, scopes), memory, scopes))
                 }
             }
 
@@ -348,13 +352,13 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             let mut last = Value::Null;
             loop {
                 if extracute!(cond, scope_id, memory, scopes).to_bool()? {
-                    last = extracute!(code, derive_scope(scope_id, scopes), memory, scopes);
+                    last = extracute!(code, derive_scope(scope_id, scope_id, scopes), memory, scopes);
                 } else { return ret_value( last ); }
             }
         },
         ASTNode::Constant { value } => value.clone(),
         ASTNode::Block { code } =>
-            extracute!(code, derive_scope(scope_id, scopes), memory, scopes),
+            extracute!(code, derive_scope(scope_id, scope_id, scopes), memory, scopes),
         ASTNode::Func { code, arg_names } => {
             Value::Function {arg_names: arg_names.clone(), code: code.clone(), scope_id}
         }
@@ -415,7 +419,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                         converted_args.push( extracute!(i, scope_id, memory, scopes) );
                     }
                     
-                    let run_scope = derive_scope(def_scope, scopes);
+                    let run_scope = derive_scope(def_scope, scope_id, scopes);
                     for (i, j) in arg_names.iter().zip(converted_args.iter()) {
                         scopes.set_var(i.clone(), run_scope, memory, j, true);
                     }
