@@ -6,12 +6,32 @@ pub enum Value {
     Null,
     Number(f64),
     Bool(bool),
-    String(String),
+    String(String), //not usable yet
     Builtin(String),
     Function {arg_names: Vec<String>, code: Box<ASTNode>, scope_id: RegIndex},
+    Array(Vec<Value>),
 }
 
 impl Value {
+
+    pub fn to_str(&self) -> String {
+        match self {
+            Value::Null => String::from("Null"),
+            Value::Number(value) => value.to_string(),
+            Value::Bool(value) => if *value { String::from("True") } else { String::from("False") },
+            Value::String(value) => format!("'{}'",value),
+            Value::Builtin(name) => format!("<builtin: {}>", name),
+            Value::Function { arg_names: _, code: _, scope_id: _ } => String::from("|...| {...}"),
+            Value::Array(arr) => {
+                let mut str_vec = Vec::new();
+                for i in arr {
+                    str_vec.push(i.to_str());
+                }
+                format!("[{}]",str_vec.join(","))
+            },
+        }
+    }
+
     pub fn plus(&self, other: Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>

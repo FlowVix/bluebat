@@ -27,11 +27,13 @@ pub struct Scope {
     vars: HashMap<String, RegIndex>,
 }
 
+#[derive(Debug)]
 pub struct Memory {
     counter: RegIndex,
     register: HashMap<RegIndex, Value>,
 }
 
+#[derive(Debug)]
 pub struct ScopeList {
     counter: RegIndex,
     pub register: HashMap<RegIndex, Scope>,
@@ -120,9 +122,9 @@ fn extract(node_result: NodeResult, scope_id: RegIndex, memory: &mut Memory, sco
 }
 
 macro_rules! extracute {
-    ( $funny_node:expr, $the_scope:expr, $the_memory:expr, $the_scopes:expr ) => {
+    ( $funny_node:expr, $the_scope_id:expr, $the_memory:expr, $the_scopes:expr ) => {
         {
-            let bruh: RegIndex = $the_scope;
+            let bruh: RegIndex = $the_scope_id;
             extract( execute($funny_node, bruh, $the_memory, $the_scopes)?, bruh, $the_memory, $the_scopes)?
         }
     };
@@ -301,8 +303,14 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                         }
                         "print" => {
                             for i in args {
-                                println!("{:?}", extracute!(i, scope_id, memory, scopes) );
+                                println!("{}", extracute!(i, scope_id, memory, scopes).to_str() );
                             }
+                            
+                            Value::Null
+                        }
+                        "memtest" => {
+                            println!("{:#?}",memory);
+                            println!("{:#?}",scopes);
                             
                             Value::Null
                         }
@@ -326,6 +334,24 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     extracute!(&code, run_scope, memory, scopes)
                 }
                 _ => error_out!("Invalid base for call")
+            }
+        }
+        ASTNode::Array {values} => {
+
+            let mut eval_values : Vec<Value> = Vec::new();
+            for i in values {
+                eval_values.push( extracute!(i, scope_id, memory, scopes) );
+            }
+            Value::Array(eval_values)
+        }
+        ASTNode::Index { base, index } => {
+            let i = match extracute!(index, scope_id, memory, scopes) {
+                Value::Number(value) => value.floor(),
+                _ => error_out!("Cannot index with type")
+            } as isize;
+            match extracute!(base, scope_id, memory, scopes) {
+                Value::Array(arr) => if i >= arr.len() as isize || i < 0 {error_out!("Index out of bounds")} else {arr[i as usize].clone()},
+                _ => error_out!("Type cannot be indexed")
             }
         }
     } )

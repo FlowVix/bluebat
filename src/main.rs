@@ -18,17 +18,19 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
     tokens.push(Token::Eol);
     tokens.push(Token::Eof);
     
-
     let tree = parser::parse(&tokens);
+
+    
     match tree {
         Ok((node, _)) => {
-            //println!("{:?}",node);
+            //println!("{:#?}",node);
+            
             let ass = interpreter::start_execute(&node, scopes, memory);
             if let Ok(interpreter::NodeResult::Value(result)) = ass {
                 if print_result {
                     match result {
                         Value::Null => (),
-                        _ => println!("{:#?}",result)
+                        _ => println!("{}",result.to_str())
                     }
                 }
             } else if let Err(BaseError::InterpreterError(message)) = ass {
@@ -38,6 +40,7 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
         Err(BaseError::ParseError(message)) => println!("{}",message),
         _ => unimplemented!(),
     }
+    
 }
 
 fn main() {
@@ -53,8 +56,9 @@ fn main() {
     scopes.set_var_local("cos".to_string(), 0, &mut memory, &Value::Builtin("cos".to_string()));
     scopes.set_var_local("tan".to_string(), 0, &mut memory, &Value::Builtin("tan".to_string()));
     scopes.set_var_local("print".to_string(), 0, &mut memory, &Value::Builtin("print".to_string()));
+    scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     
-    if true {
+    if false {
         print!("\n----------------------------------------\n\n");
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");

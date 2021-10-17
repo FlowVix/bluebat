@@ -19,6 +19,8 @@ pub enum ASTNode {
     If {conds: Vec<(ASTNode,ASTNode)>, if_none: Box<Option<ASTNode>>},
     While {cond: Box<ASTNode>, code: Box<ASTNode>},
     Func {code: Box<ASTNode>, arg_names: Vec<String>},
+    Array {values: Vec<ASTNode>},
+    Index {base: Box<ASTNode>, index: Box<ASTNode>}
 }
 
 struct Precedence {
@@ -131,6 +133,25 @@ fn parse_value(tokens: &TokenList, mut pos: ParsePos) -> ParseResult {
             }
             destr!{!let code, pos from parse_expr(tokens, pos + 1)}
             Ok((ASTNode::Func{code: Box::new(code), arg_names}, pos))
+        },
+        Token::LSqBracket => {
+            let mut values: Vec<ASTNode> = Vec::new();
+
+            pos += 1;
+            pos = skip_eol(tokens, pos);
+            while !matches!(&tokens[pos], Token::RSqBracket) {
+                pos = skip_eol(tokens, pos);
+                destr!{!let value, pos from parse_expr(tokens, pos)}
+                values.push(value);
+                pos = skip_eol(tokens, pos);
+                if !matches!(&tokens[pos], Token::Comma) {
+                    if !matches!(&tokens[pos], Token::RSqBracket) {
+                        return Err(BaseError::ParseError("Expected ',' or ']'".to_string()));
+                    }
+                } else { pos += 1; }
+            }
+            pos += 1;
+            Ok((ASTNode::Array { values }, pos))
         }
         _ => Err(BaseError::ParseError("Expected value".to_string()))
     }
@@ -145,6 +166,7 @@ fn parse_term(tokens: &TokenList, pos: ParsePos) -> ParseResult {
             pos = skip_eol(tokens, pos);
             let mut args: Vec<ASTNode> = Vec::new();
             while !matches!(&tokens[pos], Token::RParen) {
+                pos = skip_eol(tokens, pos);
                 destr!{!let arg, pos from parse_expr(tokens, pos)}
                 args.push(arg);
                 pos = skip_eol(tokens, pos);
@@ -156,6 +178,16 @@ fn parse_term(tokens: &TokenList, pos: ParsePos) -> ParseResult {
             }
             pos += 1;
             value = ASTNode::Call {base: Box::new(value), args}
+        } else if matches!(&tokens[pos], Token::LSqBracket) {
+            pos += 1;
+            pos = skip_eol(tokens, pos);
+            destr!{!let index, pos from parse_expr(tokens, pos)}
+            pos = skip_eol(tokens, pos);
+            if !matches!(&tokens[pos], Token::RSqBracket) {
+                return Err(BaseError::ParseError("Expected ']'".to_string()));
+            }
+            pos += 1;
+            value = ASTNode::Index { base: Box::new(value), index: Box::new(index) }
         } else {
             return Ok((value, pos))
         }

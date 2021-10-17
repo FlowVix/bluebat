@@ -74,6 +74,12 @@ pub enum Token {
     #[token("}")]
     RBracket,
 
+    #[token("[")]
+    LSqBracket,
+
+    #[token("]")]
+    RSqBracket,
+
     #[regex(r";|\n|\r")]
     Eol,
 

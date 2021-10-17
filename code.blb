@@ -1,8 +1,4 @@
 
 
-dick = || a
 
-a = 4
-
-print(dick())
 
