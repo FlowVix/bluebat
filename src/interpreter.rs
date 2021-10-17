@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::{collections::{HashMap, HashSet}};
 
 use crate::{errors::{BaseError}, lexer::Token, parser::ASTNode, value::Value};
 
@@ -39,6 +39,50 @@ pub struct ScopeList {
     pub register: HashMap<RegIndex, Scope>,
 }
 
+#[derive(Debug)]
+pub struct CollectTracker {
+    marked_scopes: HashSet<RegIndex>,
+    marked_values: HashSet<RegIndex>,
+}
+
+impl CollectTracker {
+    fn new(memory: &Memory, scopes: &ScopeList) -> Self {
+        let mut marked_scopes = HashSet::new();
+        let mut marked_values = HashSet::new();
+        for (i, _) in &memory.register {
+            marked_values.insert(*i);
+        }
+        for (i, _) in &scopes.register {
+            marked_scopes.insert(*i);
+        }
+        Self {
+            marked_values,
+            marked_scopes,
+        }
+    }
+}
+
+fn get_value_referenced_scopes(value: &Value, memory: &Memory, scopes: &ScopeList) -> Option<Vec<RegIndex>> {
+    match value {
+        Value::Function { arg_names: _, code: _, scope_id } => Some(vec![*scope_id]),
+        Value::Array(arr) => {
+            let mut res_ids = Vec::new();
+            for i in arr {
+                match get_value_referenced_scopes(i, memory, scopes) {
+                    Some(ids) => { 
+                        for j in ids {
+                            res_ids.push(j);
+                        }
+                    }
+                    None => todo!(),
+                }
+            }
+            Some(res_ids)
+        }
+        _ => None,
+    }
+}
+
 impl Memory {
     pub fn new() -> Self {
         return Memory {counter: 0, register: HashMap::new()};
@@ -56,6 +100,46 @@ impl Memory {
         self.register.get(&id).unwrap().clone()
     }
     */
+
+    pub fn collect(&mut self, scopes: &mut ScopeList, scope_id: RegIndex) {
+        let mut tracker = CollectTracker::new(self, scopes);
+        self.mark(scopes, scope_id, &mut tracker);
+        //println!("{:#?}",tracker);
+        for i in tracker.marked_scopes {
+            scopes.register.remove(&i);
+        }
+        for i in tracker.marked_values {
+            self.register.remove(&i);
+        }
+    }
+
+    pub fn mark(&mut self, scopes: &mut ScopeList, scope_id: RegIndex, tracker: &mut CollectTracker) {
+        let mut var_ids = Vec::new();
+        tracker.marked_scopes.remove(&scope_id);
+        for (_, var_id) in &scopes.register.get(&scope_id).unwrap().vars {
+            var_ids.push(*var_id);
+        }
+        for var_id in var_ids {
+            tracker.marked_values.remove(&var_id);
+            let referenced = get_value_referenced_scopes(self.register.get(&var_id).unwrap(), self, scopes);
+            match referenced {
+                Some(ids) => {
+                    for i in ids {
+                        if tracker.marked_scopes.contains(&i) {
+                            self.mark(scopes, i, tracker);
+                        }
+                    }
+                }
+                None => (),
+            }
+        }
+        let parent_id = scopes.register.get(&scope_id).unwrap().parent_id;
+        match parent_id {
+            Some(id) => self.mark(scopes, id, tracker),
+            None => (),
+        }
+    }
+
 }
 
 impl ScopeList {
@@ -143,6 +227,7 @@ pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory
 }
 
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ExecuteResult {
+    memory.collect(scopes, scope_id);
     ret_value( match node {
         ASTNode::Value { value } => extracute!( value, scope_id, memory, scopes ),
         ASTNode::Num { value } => Value::Number(*value),
@@ -312,6 +397,10 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             println!("{:#?}",memory);
                             println!("{:#?}",scopes);
                             
+                            Value::Null
+                        }
+                        "collect" => {
+                            memory.collect(scopes, scope_id);
                             Value::Null
                         }
                         _ => unimplemented!(),

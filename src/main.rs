@@ -57,8 +57,9 @@ fn main() {
     scopes.set_var_local("tan".to_string(), 0, &mut memory, &Value::Builtin("tan".to_string()));
     scopes.set_var_local("print".to_string(), 0, &mut memory, &Value::Builtin("print".to_string()));
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
+    scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
     
-    if false {
+    if true {
         print!("\n----------------------------------------\n\n");
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
