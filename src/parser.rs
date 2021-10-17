@@ -148,7 +148,7 @@ fn parse_value(tokens: &TokenList, mut pos: ParsePos) -> ParseResult {
                     if !matches!(&tokens[pos], Token::RSqBracket) {
                         return Err(BaseError::ParseError("Expected ',' or ']'".to_string()));
                     }
-                } else { pos += 1; }
+                } else { pos += 1; pos = skip_eol(tokens, pos); }
             }
             pos += 1;
             Ok((ASTNode::Array { values }, pos))
@@ -174,7 +174,7 @@ fn parse_term(tokens: &TokenList, pos: ParsePos) -> ParseResult {
                     if !matches!(&tokens[pos], Token::RParen) {
                         return Err(BaseError::ParseError("Expected ',' or ')'".to_string()));
                     }
-                } else { pos += 1; }
+                } else { pos += 1; pos = skip_eol(tokens, pos); }
             }
             pos += 1;
             value = ASTNode::Call {base: Box::new(value), args}
@@ -186,7 +186,7 @@ fn parse_term(tokens: &TokenList, pos: ParsePos) -> ParseResult {
             if !matches!(&tokens[pos], Token::RSqBracket) {
                 return Err(BaseError::ParseError("Expected ']'".to_string()));
             }
-            pos += 1;
+            pos += 1; pos = skip_eol(tokens, pos);
             value = ASTNode::Index { base: Box::new(value), index: Box::new(index) }
         } else {
             return Ok((value, pos))

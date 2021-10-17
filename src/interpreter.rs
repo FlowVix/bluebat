@@ -75,7 +75,7 @@ fn get_value_referenced_scopes(value: &Value, memory: &Memory, scopes: &ScopeLis
                             res_ids.push(j);
                         }
                     }
-                    None => todo!(),
+                    None => (),
                 }
             }
             Some(res_ids)
@@ -230,7 +230,7 @@ pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory
 }
 
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ExecuteResult {
-    println!("\n\n{:#?}\nscope_id: {},\n{:#?}",memory,scope_id,scopes);
+    //println!("\n\n{:#?}\nscope_id: {},\n{:#?}",memory,scope_id,scopes);
     memory.collect(scopes, scope_id);
     ret_value( match node {
         ASTNode::Value { value } => extracute!( value, scope_id, memory, scopes ),
@@ -391,10 +391,23 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             converted_args[0].tan()?
                         }
                         "print" => {
-                            for i in args {
-                                println!("{}", extracute!(i, scope_id, memory, scopes).to_str() );
+                            if args.len() == 0 {
+                                print!("");
+                            } else {
+                                for i in args {
+                                    print!("{}", extracute!(i, scope_id, memory, scopes).to_str() );
+                                }
                             }
-                            
+                            Value::Null
+                        }
+                        "println" => {
+                            if args.len() == 0 {
+                                println!("");
+                            } else {
+                                for i in args {
+                                    println!("{}", extracute!(i, scope_id, memory, scopes).to_str() );
+                                }
+                            }
                             Value::Null
                         }
                         "memtest" => {

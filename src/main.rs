@@ -56,6 +56,7 @@ fn main() {
     scopes.set_var_local("cos".to_string(), 0, &mut memory, &Value::Builtin("cos".to_string()));
     scopes.set_var_local("tan".to_string(), 0, &mut memory, &Value::Builtin("tan".to_string()));
     scopes.set_var_local("print".to_string(), 0, &mut memory, &Value::Builtin("print".to_string()));
+    scopes.set_var_local("println".to_string(), 0, &mut memory, &Value::Builtin("println".to_string()));
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
     
@@ -65,7 +66,7 @@ fn main() {
             .expect("Something went wrong reading the file");
         
         run(input_str, &mut memory, &mut scopes, false);
-        print!("\n----------------------------------------\n\n");
+        print!("\n\n----------------------------------------\n\n");
     } else {
 
         print!("
