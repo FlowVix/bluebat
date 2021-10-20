@@ -44,7 +44,7 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
 }
 
 fn main() {
-
+    print!("\x1B[2J\x1B[1;1H");
     if false {
         print!("{:?}",Value::String(String::from("ass")))
     }
@@ -60,13 +60,12 @@ fn main() {
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
     
-    if true {
-        print!("\n----------------------------------------\n\n");
+    if false {
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
         
         run(input_str, &mut memory, &mut scopes, false);
-        print!("\n\n----------------------------------------\n\n");
+        print!("\n");
     } else {
 
         print!("

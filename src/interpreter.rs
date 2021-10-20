@@ -32,6 +32,7 @@ pub struct Scope {
 pub struct Memory {
     counter: RegIndex,
     register: HashMap<RegIndex, Value>,
+    protected: Vec<Vec<RegIndex>>,
 }
 
 #[derive(Debug)]
@@ -86,7 +87,7 @@ fn get_value_referenced_scopes(value: &Value, memory: &Memory, scopes: &ScopeLis
 
 impl Memory {
     pub fn new() -> Self {
-        return Memory {counter: 0, register: HashMap::new()};
+        return Memory {counter: 0, register: HashMap::new(), protected: Vec::new()};
     }
 
     pub fn add(&mut self, value: Value) {
@@ -101,6 +102,22 @@ impl Memory {
         self.register.get(&id).unwrap().clone()
     }
     */
+
+    pub fn new_protected(&mut self) {
+        self.protected.push(Vec::new());
+    }
+    pub fn pop_protected(&mut self) {
+        println!("{:?}",self.protected);
+        self.protected.pop();
+    }
+    pub fn protect(&mut self, id: RegIndex) {
+        self.protected
+            .last_mut()
+            .unwrap()
+            .push(id);
+    }
+
+
 
     pub fn collect(&mut self, scopes: &mut ScopeList, scope_id: RegIndex) {
         let mut tracker = CollectTracker::new(self, scopes);
@@ -136,6 +153,7 @@ impl Memory {
         }
         let parent_id = scopes.register.get(&scope_id).unwrap().parent_id;
         match parent_id {
+            
             Some(id) => self.mark(scopes, id, tracker),
             None => (),
         }
@@ -204,7 +222,9 @@ fn extract(node_result: NodeResult, scope_id: RegIndex, memory: &mut Memory, sco
             Some(id) => Ok(memory.register.get(&id).unwrap().clone()),
             None => Err(BaseError::InterpreterError(format!("Unknown variable: {}", name).to_string())),
         }
-        NodeResult::Value(value) => Ok(value)
+        NodeResult::Value(value) => { 
+            Ok(value)
+        }
     }
 }
 
@@ -216,6 +236,7 @@ macro_rules! extracute {
         }
     };
 }
+
 
 macro_rules! error_out {
     ( $message:expr ) => {
@@ -232,7 +253,10 @@ pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ExecuteResult {
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}",memory,scope_id,scopes);
     memory.collect(scopes, scope_id);
-    ret_value( match node {
+
+    memory.new_protected();
+
+    let value = match node {
         ASTNode::Value { value } => extracute!( value, scope_id, memory, scopes ),
         ASTNode::Num { value } => Value::Number(*value),
         ASTNode::Unary { op, value } => {
@@ -290,45 +314,51 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     }
                 },
                 Token::And => {
-                    if !extracute!(left, scope_id, memory, scopes).to_bool()?
-                        { return ret_value( Value::Bool(false) ) }
-                    if !extracute!(right, scope_id, memory, scopes).to_bool()?
-                        { return ret_value( Value::Bool(false) ) }
+                    if !extracute!(left, scope_id, memory, scopes).to_bool()? { 
+                        memory.pop_protected();
+                        return ret_value( Value::Bool(false) )
+                    }
+                    if !extracute!(right, scope_id, memory, scopes).to_bool()? { 
+                        memory.pop_protected();
+                        return ret_value( Value::Bool(false) )
+                    }
                     Value::Bool(true)
                 }
                 Token::Or => {
-                    if extracute!(left, scope_id, memory, scopes).to_bool()?
-                        { return ret_value( Value::Bool(true) ) }
-                    if extracute!(right, scope_id, memory, scopes).to_bool()?
-                        { return ret_value( Value::Bool(true) ) }
+                    if extracute!(left, scope_id, memory, scopes).to_bool()? { 
+                        memory.pop_protected();
+                        return ret_value( Value::Bool(true) )
+                    }
+                    if extracute!(right, scope_id, memory, scopes).to_bool()? { 
+                        memory.pop_protected();
+                        return ret_value( Value::Bool(true) )
+                    }
                     Value::Bool(false)
                 }
                 Token::Assign => {
                     let right_eval = extracute!(right, scope_id, memory, scopes);
-                    let left_raw = execute(left, scope_id, memory, scopes)?;
-                    match left_raw {
-                        NodeResult::VarName(name) => {
+                    match (**left).clone() {
+                        ASTNode::Var { name } => {
                             scopes.set_var(name, scope_id, memory, &right_eval, true);
                             right_eval
-                        }
-                        NodeResult::Value(_) => error_out!("Expected variable name")
+                        },
+                        _ => error_out!("Expected variable name")
                     }
                 }
                 Token::LocalAssign => {
                     let right_eval = extracute!(right, scope_id, memory, scopes);
-                    let left_raw = execute(left, scope_id, memory, scopes)?;
-                    match left_raw {
-                        NodeResult::VarName(name) => {
+                    match (**left).clone() {
+                        ASTNode::Var { name } => {
                             scopes.set_var_local(name, scope_id, memory, &right_eval);
                             right_eval
-                        }
-                        NodeResult::Value(_) => error_out!("Expected variable name")
+                        },
+                        _ => error_out!("Expected variable name")
                     }
                 }
                 _ => todo!(),
             }
         },
-        ASTNode::Var { name } => {return Ok( NodeResult::VarName(name.clone()) )},
+        ASTNode::Var { name } => { memory.pop_protected(); return Ok( NodeResult::VarName(name.clone()) )},
         ASTNode::StatementList { statements } => {
             let mut last = Value::Null;
             for i in statements {
@@ -339,6 +369,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
         ASTNode::If { conds, if_none } => {
             for i in conds {
                 if extracute!(&i.0, scope_id, memory, scopes).to_bool()? {
+                    memory.pop_protected();
                     return ret_value(extracute!(&i.1, derive_scope(scope_id, scope_id, scopes), memory, scopes))
                 }
             }
@@ -353,7 +384,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             loop {
                 if extracute!(cond, scope_id, memory, scopes).to_bool()? {
                     last = extracute!(code, derive_scope(scope_id, scope_id, scopes), memory, scopes);
-                } else { return ret_value( last ); }
+                } else { memory.pop_protected(); return ret_value( last ); }
             }
         },
         ASTNode::Constant { value } => value.clone(),
@@ -394,9 +425,11 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             if args.len() == 0 {
                                 print!("");
                             } else {
+                                let mut s = String::from("");
                                 for i in args {
-                                    print!("{}", extracute!(i, scope_id, memory, scopes).to_str() );
+                                    s.push_str( &format!("{} ",extracute!(i, scope_id, memory, scopes).to_str()) );
                                 }
+                                print!("{}",s);
                             }
                             Value::Null
                         }
@@ -404,9 +437,11 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             if args.len() == 0 {
                                 println!("");
                             } else {
+                                let mut s = String::from("");
                                 for i in args {
-                                    println!("{}", extracute!(i, scope_id, memory, scopes).to_str() );
+                                    s.push_str( &format!("{} ",extracute!(i, scope_id, memory, scopes).to_str()) );
                                 }
+                                println!("{}",s);
                             }
                             Value::Null
                         }
@@ -460,7 +495,9 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 _ => error_out!("Type cannot be indexed")
             }
         }
-    } )
+    };
+    memory.pop_protected();
+    ret_value( value )
 }
 
 
