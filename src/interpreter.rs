@@ -99,7 +99,7 @@ impl Memory {
         self.register.insert(id, value);
     }
     
-    pub fn get(&mut self, id: RegIndex) -> &Value {
+    pub fn get(&self, id: RegIndex) -> &Value {
         self.register.get(&id).unwrap()
     }
     
@@ -111,13 +111,13 @@ impl Memory {
         println!("{:?}",self.protected);
         self.protected.pop();
     }
-    pub fn protect(&mut self, value: Value) -> &Value {
+    pub fn protect(&mut self, value: Value) -> Value {
         self.add(value);
         self.protected
             .last_mut()
             .unwrap()
             .push(self.counter);
-        self.get(self.counter)
+        self.get(self.counter).clone()
     }
     pub fn protect_id(&mut self, value: Value) -> RegIndex {
         self.add(value);
@@ -250,6 +250,25 @@ macro_rules! extracute {
 */
 
 
+macro_rules! protecute {
+    ( $funny_node:expr, $the_scope_id:expr, $the_memory:expr, $the_scopes:expr ) => {
+        {
+            let bruh = execute($funny_node, $the_scope_id, $the_memory, $the_scopes)?;
+            $the_memory.protect(bruh)
+        }
+    };
+}
+
+macro_rules! protecute_id {
+    ( $funny_node:expr, $the_scope_id:expr, $the_memory:expr, $the_scopes:expr ) => {
+        {
+            let bruh = execute($funny_node, $the_scope_id, $the_memory, $the_scopes)?;
+            $the_memory.protect_id(bruh)
+        }
+    };
+}
+
+
 
 macro_rules! error_out {
     ( $message:expr ) => {
@@ -259,13 +278,14 @@ macro_rules! error_out {
 
 pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory) -> ExecuteResult {
 
+    memory.protected.clear();
     execute(node, 0, memory, scopes)
 
 }
 
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ExecuteResult {
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}",memory,scope_id,scopes);
-    memory.collect(scopes, scope_id);
+    //memory.collect(scopes, scope_id);
 
     memory.new_protected();
 
@@ -273,7 +293,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
         ASTNode::Value { value } => execute( value, scope_id, memory, scopes )?,
         ASTNode::Num { value } => Value::Number(*value),
         ASTNode::Unary { op, value } => {
-            let value = memory.protect( execute(value, scope_id, memory, scopes)? );
+            let value = protecute!(value, scope_id, memory, scopes);
             match op {
                 crate::lexer::Token::Plus => value.give()?,
                 crate::lexer::Token::Minus => value.neg()?,
@@ -284,24 +304,22 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
         ASTNode::Op { left, op, right } => {
             match op {
                 Token::Plus | Token::Minus | Token::Mult | Token::Div | Token::Mod | Token::Pow | Token::Greater | Token::Lesser | Token::GreaterEq | Token::LesserEq | Token::Eq | Token::NotEq => {
-                    let left = execute(left, scope_id, memory, scopes)?;
-                    let left = memory.protect(left);
-                    let right = execute(right, scope_id, memory, scopes)?;
-                    let right = memory.protect(right);
+                    let left = protecute!(left, scope_id, memory, scopes);
+                    let right = protecute!(right, scope_id, memory, scopes);
 
                     match op {
-                        Token::Plus => left.plus(right)?,
-                        Token::Minus => left.minus(right)?,
-                        Token::Mult => left.mult(right)?,
-                        Token::Div => left.div(right)?,
-                        Token::Mod => left.rem(right)?,
-                        Token::Pow => left.pow(right)?,
-                        Token::Greater => left.gr(right)?,
-                        Token::GreaterEq => left.greq(right)?,
-                        Token::Lesser => left.sm(right)?,
-                        Token::LesserEq => left.smeq(right)?,
-                        Token::Eq => left.eq(right)?,
-                        Token::NotEq => left.neq(right)?,
+                        Token::Plus => left.plus(&right)?,
+                        Token::Minus => left.minus(&right)?,
+                        Token::Mult => left.mult(&right)?,
+                        Token::Div => left.div(&right)?,
+                        Token::Mod => left.rem(&right)?,
+                        Token::Pow => left.pow(&right)?,
+                        Token::Greater => left.gr(&right)?,
+                        Token::GreaterEq => left.greq(&right)?,
+                        Token::Lesser => left.sm(&right)?,
+                        Token::LesserEq => left.smeq(&right)?,
+                        Token::Eq => left.eq(&right)?,
+                        Token::NotEq => left.neq(&right)?,
                         _ => unimplemented!(),
                     }
 
@@ -407,7 +425,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 } else { memory.pop_protected(); return Ok( last ) ; }
             }
         },
-        ASTNode::Constant { value } => *value,
+        ASTNode::Constant { value } => value.clone(),
         ASTNode::Block { code } =>
             execute(code, derive_scope(scope_id, scope_id, scopes), memory, scopes)?,
         ASTNode::Func { code, arg_names } => {
@@ -419,25 +437,25 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     match &name[..] {
                         "sin" => {
                             if args.len() != 1 {error_out!("Expected 1 argument")}
-                            let mut converted_args: Vec<&Value> = Vec::new();
+                            let mut converted_args: Vec<Value> = Vec::new();
                             for i in args {
-                                converted_args.push( memory.protect( execute(i, scope_id, memory, scopes)? ) );
+                                converted_args.push( protecute!(i, scope_id, memory, scopes) );
                             }
                             converted_args[0].sin()?
                         }
                         "cos" => {
                             if args.len() != 1 {error_out!("Expected 1 argument")}
-                            let mut converted_args: Vec<&Value> = Vec::new();
+                            let mut converted_args: Vec<Value> = Vec::new();
                             for i in args {
-                                converted_args.push( memory.protect( execute(i, scope_id, memory, scopes)? ) );
+                                converted_args.push( protecute!(i, scope_id, memory, scopes) );
                             }
                             converted_args[0].cos()?
                         }
                         "tan" => {
                             if args.len() != 1 {error_out!("Expected 1 argument")}
-                            let mut converted_args: Vec<&Value> = Vec::new();
+                            let mut converted_args: Vec<Value> = Vec::new();
                             for i in args {
-                                converted_args.push( memory.protect( execute(i, scope_id, memory, scopes)? ) );
+                                converted_args.push( protecute!(i, scope_id, memory, scopes) );
                             }
                             converted_args[0].tan()?
                         }
@@ -482,9 +500,9 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     if args.len() != arg_names.len() {
                         error_out!(format!{"Expected {} argument(s)", arg_names.len()})
                     }
-                    let mut converted_args: Vec<&Value> = Vec::new();
+                    let mut converted_args: Vec<Value> = Vec::new();
                     for i in args {
-                        converted_args.push( memory.protect( execute(i, scope_id, memory, scopes)? ) );
+                        converted_args.push( protecute!(i, scope_id, memory, scopes) );
                     }
                     
                     let run_scope = derive_scope(def_scope, scope_id, scopes);
@@ -501,7 +519,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
 
             let mut eval_values = Vec::new();
             for i in values {
-                eval_values.push( memory.protect_id( execute(i, scope_id, memory, scopes)? ) );
+                eval_values.push( protecute_id!(i, scope_id, memory, scopes) );
             }
             Value::Array(eval_values)
         }
