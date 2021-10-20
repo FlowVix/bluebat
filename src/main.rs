@@ -26,11 +26,11 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
             //println!("{:#?}",node);
             
             let ass = interpreter::start_execute(&node, scopes, memory);
-            if let Ok(interpreter::NodeResult::Value(result)) = ass {
+            if let Ok(result) = ass {
                 if print_result {
                     match result {
                         Value::Null => (),
-                        _ => println!("{}",result.to_str())
+                        _ => println!("{}",result.to_str(&memory))
                     }
                 }
             } else if let Err(BaseError::InterpreterError(message)) = ass {

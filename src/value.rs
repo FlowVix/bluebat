@@ -1,4 +1,4 @@
-use crate::{errors::BaseError, interpreter::{RegIndex, ValueResult}, parser::ASTNode};
+use crate::{errors::BaseError, interpreter::{Memory, RegIndex, ValueResult}, parser::ASTNode};
 
 
 #[derive(Debug, Clone)]
@@ -9,12 +9,12 @@ pub enum Value {
     String(String), //not usable yet
     Builtin(String),
     Function {arg_names: Vec<String>, code: Box<ASTNode>, scope_id: RegIndex},
-    Array(Vec<Value>),
+    Array(Vec<RegIndex>),
 }
 
 impl Value {
 
-    pub fn to_str(&self) -> String {
+    pub fn to_str(&self, memory: &Memory) -> String {
         match self {
             Value::Null => String::from("Null"),
             Value::Number(value) => value.to_string(),
@@ -25,52 +25,52 @@ impl Value {
             Value::Array(arr) => {
                 let mut str_vec = Vec::new();
                 for i in arr {
-                    str_vec.push(i.to_str());
+                    str_vec.push(memory.get(*i).to_str(memory));
                 }
                 format!("[{}]",str_vec.join(","))
             },
         }
     }
 
-    pub fn plus(&self, other: Value) -> ValueResult {
+    pub fn plus(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 + v2 )),
             _ => Err(BaseError::InterpreterError("Operation '+' not defined for types".to_string()))
         }
     }
-    pub fn minus(&self, other: Value) -> ValueResult {
+    pub fn minus(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 - v2 )),
             _ => Err(BaseError::InterpreterError("Operation '-' not defined for types".to_string()))
         }
     }
-    pub fn mult(&self, other: Value) -> ValueResult {
+    pub fn mult(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 * v2 )),
             _ => Err(BaseError::InterpreterError("Operation '*' not defined for types".to_string()))
         }
     }
-    pub fn div(&self, other: Value) -> ValueResult {
+    pub fn div(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 / v2 )),
             _ => Err(BaseError::InterpreterError("Operation '/' not defined for types".to_string()))
         }
     }
-    pub fn rem(&self, other: Value) -> ValueResult {
+    pub fn rem(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 % v2 )),
             _ => Err(BaseError::InterpreterError("Operation '%' not defined for types".to_string()))
         }
     }
-    pub fn pow(&self, other: Value) -> ValueResult {
+    pub fn pow(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
-                Ok(Value::Number(f64::powf(*v1,v2))),
+                Ok(Value::Number(f64::powf(*v1,*v2))),
             _ => Err(BaseError::InterpreterError("Operation '^' not defined for types".to_string()))
         }
     }
@@ -94,45 +94,45 @@ impl Value {
     }
 
     
-    pub fn eq(&self, other: Value) -> ValueResult {
+    pub fn eq(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Null, Value::Null) => Ok(Value::Bool( true )),
-            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 == v2 )),
-            (Value::Bool(v1), Value::Bool(v2)) => Ok(Value::Bool( *v1 == v2 )),
-            (Value::String(v1), Value::String(v2)) => Ok(Value::Bool( *v1 == v2 )),
+            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 == *v2 )),
+            (Value::Bool(v1), Value::Bool(v2)) => Ok(Value::Bool( *v1 == *v2 )),
+            (Value::String(v1), Value::String(v2)) => Ok(Value::Bool( *v1 == *v2 )),
             _ => Err(BaseError::InterpreterError("Operation '==' not defined for types".to_string()))
         }
     }
-    pub fn neq(&self, other: Value) -> ValueResult {
+    pub fn neq(&self, other: &Value) -> ValueResult {
         match (self, other) {
             (Value::Null, Value::Null) => Ok(Value::Bool( false )),
-            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 != v2 )),
-            (Value::Bool(v1), Value::Bool(v2)) => Ok(Value::Bool( *v1 != v2 )),
-            (Value::String(v1), Value::String(v2)) => Ok(Value::Bool( *v1 != v2 )),
+            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 != *v2 )),
+            (Value::Bool(v1), Value::Bool(v2)) => Ok(Value::Bool( *v1 != *v2 )),
+            (Value::String(v1), Value::String(v2)) => Ok(Value::Bool( *v1 != *v2 )),
             _ => Err(BaseError::InterpreterError("Operation '!=' not defined for types".to_string()))
         }
     }
-    pub fn gr(&self, other: Value) -> ValueResult {
+    pub fn gr(&self, other: &Value) -> ValueResult {
         match (self, other) {
-            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 > v2 )),
+            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 > *v2 )),
             _ => Err(BaseError::InterpreterError("Operation '!=' not defined for types".to_string()))
         }
     }
-    pub fn greq(&self, other: Value) -> ValueResult {
+    pub fn greq(&self, other: &Value) -> ValueResult {
         match (self, other) {
-            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 >= v2 )),
+            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 >= *v2 )),
             _ => Err(BaseError::InterpreterError("Operation '!=' not defined for types".to_string()))
         }
     }
-    pub fn sm(&self, other: Value) -> ValueResult {
+    pub fn sm(&self, other: &Value) -> ValueResult {
         match (self, other) {
-            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 < v2 )),
+            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 < *v2 )),
             _ => Err(BaseError::InterpreterError("Operation '!=' not defined for types".to_string()))
         }
     }
-    pub fn smeq(&self, other: Value) -> ValueResult {
+    pub fn smeq(&self, other: &Value) -> ValueResult {
         match (self, other) {
-            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 <= v2 )),
+            (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 <= *v2 )),
             _ => Err(BaseError::InterpreterError("Operation '!=' not defined for types".to_string()))
         }
     }
