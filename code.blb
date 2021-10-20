@@ -1,13 +1,21 @@
 
 
-a = {
-    piss = 0
-    [ || {piss += 1; print(piss);} ]
+gaga = || {
+    i = 0
+    a = || i = i + 1
+    b = || print(i)
+    [[a, a], b]
 }
 
-a[0]()
-a[0]()
-a[0]()
-a[0]()
+poop = gaga()
+poop[1]()
+poop[0][1]()
+poop[1]()
+poop[0][1]()
+poop[1]()
+poop[0][1]()
+poop[1]()
+poop[0][1]()
+poop[1]()
 
 

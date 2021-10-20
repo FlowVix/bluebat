@@ -60,7 +60,7 @@ fn main() {
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
     
-    if false {
+    if true {
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
         
@@ -69,7 +69,7 @@ fn main() {
     } else {
 
         print!("
-BlueBat v0.1.0 Console
+BlueBat v0.2.0 Console
 --------------------------- 
 
 ");

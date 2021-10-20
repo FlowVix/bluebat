@@ -3,12 +3,7 @@ use std::{collections::{HashMap, HashSet}};
 use crate::{errors::{BaseError}, lexer::Token, parser::ASTNode, value::Value};
 
 pub type RegIndex = usize;
-#[derive(Clone, Debug)]
-pub enum NodeResult {
-    VarName(String),
-    Value(Value),
-}
-type ExecuteResult = Result<Value, BaseError>;
+
 pub type ValueResult = Result<Value, BaseError>;
 /*
 fn ret_value(value: Value) -> ExecuteResult {
@@ -64,24 +59,21 @@ impl CollectTracker {
     }
 }
 
-fn get_value_referenced_scopes(value: &Value, memory: &Memory, scopes: &ScopeList) -> Option<Vec<RegIndex>> {
+fn get_value_references(value: &Value, memory: &Memory, scopes: &ScopeList) -> (Vec<RegIndex>, Vec<RegIndex>) {
     match value {
-        Value::Function { arg_names: _, code: _, scope_id } => Some(vec![*scope_id]),
-        Value::Array(arr) => {
-            let mut res_ids = Vec::new();
+        Value::Function { arg_names: _, code: _, scope_id } => (vec![], vec![*scope_id]),
+        Value::Array (arr) => {
+            let mut res_value_ids = Vec::new();
+            let mut res_scope_ids = Vec::new();
             for i in arr {
-                match get_value_referenced_scopes(memory.get(*i), memory, scopes) {
-                    Some(ids) => { 
-                        for j in ids {
-                            res_ids.push(j);
-                        }
-                    }
-                    None => (),
-                }
+                res_value_ids.push(*i);
+                let (mut value_ids, mut scope_ids) = get_value_references(memory.register.get(i).unwrap(), memory, scopes);
+                res_value_ids.append(&mut value_ids);
+                res_scope_ids.append(&mut scope_ids);
             }
-            Some(res_ids)
+            (res_value_ids, res_scope_ids)
         }
-        _ => None,
+        _ => (vec![], vec![])
     }
 }
 
@@ -108,7 +100,7 @@ impl Memory {
         self.protected.push(Vec::new());
     }
     pub fn pop_protected(&mut self) {
-        println!("{:?}",self.protected);
+        //println!("{:?}",self.protected);
         self.protected.pop();
     }
     pub fn protect(&mut self, value: Value) -> Value {
@@ -134,6 +126,23 @@ impl Memory {
         let mut tracker = CollectTracker::new(self, scopes);
         self.mark(scopes, scope_id, &mut tracker);
         //println!("{:#?}",tracker);
+        for vec in &self.protected {
+            for var_id in vec {
+                //println!("{:#?}",var_id);
+                tracker.marked_values.remove(var_id);
+                let (value_ids, scope_ids) = get_value_references(self.register.get(&var_id).unwrap(), self, scopes);
+                //println!("{:?}; {:?}",value_ids, scope_ids);
+                for i in scope_ids {
+                    if tracker.marked_scopes.contains(&i) {
+                        self.mark(scopes, i, &mut tracker);
+                    }
+                }
+                for i in value_ids {
+                    tracker.marked_values.remove(&i);
+                }
+            }
+        }
+        //println!("{:#?}",tracker);
         for i in tracker.marked_scopes {
             scopes.register.remove(&i);
         }
@@ -142,29 +151,26 @@ impl Memory {
         }
     }
 
-    pub fn mark(&mut self, scopes: &mut ScopeList, scope_id: RegIndex, tracker: &mut CollectTracker) {
-        let mut var_ids = Vec::new();
+    pub fn mark(&self, scopes: &mut ScopeList, scope_id: RegIndex, tracker: &mut CollectTracker) {
+        let mut var_check_ids = Vec::new();
         tracker.marked_scopes.remove(&scope_id);
         for (_, var_id) in &scopes.register.get(&scope_id).unwrap().vars {
-            var_ids.push(*var_id);
+            var_check_ids.push(*var_id);
         }
-        for var_id in var_ids {
+        for var_id in var_check_ids {
             tracker.marked_values.remove(&var_id);
-            let referenced = get_value_referenced_scopes(self.register.get(&var_id).unwrap(), self, scopes);
-            match referenced {
-                Some(ids) => {
-                    for i in ids {
-                        if tracker.marked_scopes.contains(&i) {
-                            self.mark(scopes, i, tracker);
-                        }
-                    }
+            let (value_ids, scope_ids) = get_value_references (self.register.get(&var_id).unwrap(), self, scopes);
+            for i in scope_ids {
+                if tracker.marked_scopes.contains(&i) {
+                    self.mark(scopes, i, tracker);
                 }
-                None => (),
+            }
+            for i in value_ids {
+                tracker.marked_values.remove(&i);
             }
         }
         let parent_id = scopes.register.get(&scope_id).unwrap().parent_id;
         match parent_id {
-            
             Some(id) => self.mark(scopes, id, tracker),
             None => (),
         }
@@ -227,17 +233,6 @@ impl Scope {
     }
 }
 
-fn extract(node_result: NodeResult, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ValueResult {
-    match node_result {
-        NodeResult::VarName(name) => match scopes.get_var_id(name.clone(), scope_id) {
-            Some(id) => Ok(memory.register.get(&id).unwrap().clone()),
-            None => Err(BaseError::InterpreterError(format!("Unknown variable: {}", name).to_string())),
-        }
-        NodeResult::Value(value) => { 
-            Ok(value)
-        }
-    }
-}
 /*
 macro_rules! extracute {
     ( $funny_node:expr, $the_scope_id:expr, $the_memory:expr, $the_scopes:expr ) => {
@@ -276,16 +271,17 @@ macro_rules! error_out {
     }
 }
 
-pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory) -> ExecuteResult {
+pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory) -> ValueResult {
 
     memory.protected.clear();
     execute(node, 0, memory, scopes)
 
 }
 
-fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ExecuteResult {
-    //println!("\n\n{:#?}\nscope_id: {},\n{:#?}",memory,scope_id,scopes);
-    //memory.collect(scopes, scope_id);
+fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ValueResult {
+    //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",memory,scope_id,scopes,node);
+    //println!("{:?}", memory.protected);
+    memory.collect(scopes, scope_id);
 
     memory.new_protected();
 
