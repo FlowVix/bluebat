@@ -5,11 +5,7 @@ use crate::{errors::{BaseError}, lexer::Token, parser::ASTNode, value::Value};
 pub type RegIndex = usize;
 
 pub type ValueResult = Result<Value, BaseError>;
-/*
-fn ret_value(value: Value) -> ExecuteResult {
-    Ok( NodeResult::Value( value ) )
-}
-*/
+
 fn derive_scope(scope_id: RegIndex, caller_id: RegIndex, scopes: &mut ScopeList) -> RegIndex {
     scopes.counter += 1;
     scopes.register.insert( scopes.counter, Scope {parent_id: Some(scope_id), caller_id: Some(caller_id), vars: HashMap::new() } );
@@ -426,7 +422,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             Value::Function {arg_names: arg_names.clone(), code: code.clone(), scope_id}
         }
         ASTNode::Call { base, args } => {
-            match execute(base, scope_id, memory, scopes)? {
+            match protecute!(base, scope_id, memory, scopes) {
                 Value::Builtin(name) => {
                     match &name[..] {
                         "sin" => {

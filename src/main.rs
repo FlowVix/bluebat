@@ -30,11 +30,11 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
                 if print_result {
                     match result {
                         Value::Null => (),
-                        _ => println!("{}",result.to_str(&memory))
+                        _ => print!("{}",result.to_str(&memory))
                     }
                 }
             } else if let Err(BaseError::InterpreterError(message)) = ass {
-                println!("{:?}",message);
+                print!("{:?}",message);
             }
         },
         Err(BaseError::ParseError(message)) => println!("{}",message),
@@ -60,7 +60,7 @@ fn main() {
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
     
-    if true {
+    if false {
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
         
@@ -75,7 +75,7 @@ BlueBat v0.2.0 Console
 ");
 
         loop {
-            print!("{}", ">>> ");
+            print!("{}", "\n>>> ");
             io::stdout().flush().unwrap();
     
             let mut input_str = String::new();
