@@ -1,21 +1,4 @@
 
 
-gaga = || {
-    i = 0
-    a = || i = i + 1
-    b = || print(i)
-    [[a, a], b]
-}
-
-poop = gaga()
-poop[1]()
-poop[0][1]()
-poop[1]()
-poop[0][1]()
-poop[1]()
-poop[0][1]()
-poop[1]()
-poop[0][1]()
-poop[1]()
 
 

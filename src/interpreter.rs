@@ -320,30 +320,48 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     }
 
                 }
-                /*
+                
                 Token::PlusEq | Token::MinusEq | Token::MultEq | Token::DivEq | Token::ModEq | Token::PowEq  => {
-                    let right_eval = extracute!(right, scope_id, memory, scopes);
-                    let left_raw = execute(left, scope_id, memory, scopes)?;
-                    match left_raw.clone() {
-                        NodeResult::VarName(name) => {
-                            let value = extract(left_raw, scope_id, memory, scopes)?;
-                            let new_value ;
-                            match op {
-                                Token::PlusEq => {new_value = value.plus(right_eval)?},
-                                Token::MinusEq => {new_value = value.minus(right_eval)?},
-                                Token::MultEq => {new_value = value.mult(right_eval)?},
-                                Token::DivEq => {new_value = value.div(right_eval)?},
-                                Token::ModEq => {new_value = value.rem(right_eval)?},
-                                Token::PowEq => {new_value = value.pow(right_eval)?},
+                    let right_eval = execute(right, scope_id, memory, scopes)?;
+                    match (**left).clone() {
+                        ASTNode::Var {name} => {
+                            let value = execute(left, scope_id, memory, scopes)?;
+                            let new_value = match op {
+                                Token::PlusEq => value.plus(&right_eval)?,
+                                Token::MinusEq => value.minus(&right_eval)?,
+                                Token::MultEq => value.mult(&right_eval)?,
+                                Token::DivEq => value.div(&right_eval)?,
+                                Token::ModEq => value.rem(&right_eval)?,
+                                Token::PowEq => value.pow(&right_eval)?,
                                 _ => unimplemented!(),
-                            }
+                            };
                             scopes.set_var(name, scope_id, memory, &new_value, true);
                             new_value
                         }
-                        NodeResult::Value(_) => error_out!("Expected variable name")
+                        _ => error_out!("Expected variable name")
                     }
                 },
-                */
+                Token::Assign => {
+                    let right_eval = execute(right, scope_id, memory, scopes)?;
+                    match (**left).clone() {
+                        ASTNode::Var { name } => {
+                            scopes.set_var(name, scope_id, memory, &right_eval, true);
+                            right_eval
+                        },
+                        _ => error_out!("Expected variable name")
+                    }
+                }
+                Token::LocalAssign => {
+                    let right_eval = execute(right, scope_id, memory, scopes)?;
+                    match (**left).clone() {
+                        ASTNode::Var { name } => {
+                            scopes.set_var_local(name, scope_id, memory, &right_eval);
+                            right_eval
+                        },
+                        _ => error_out!("Expected variable name")
+                    }
+                }
+                
                 Token::And => {
                     if !execute(left, scope_id, memory, scopes)?.to_bool()? { 
                         memory.pop_protected();
@@ -365,26 +383,6 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                         return Ok( Value::Bool(true) )
                     }
                     Value::Bool(false)
-                }
-                Token::Assign => {
-                    let right_eval = execute(right, scope_id, memory, scopes)?;
-                    match (**left).clone() {
-                        ASTNode::Var { name } => {
-                            scopes.set_var(name, scope_id, memory, &right_eval, true);
-                            right_eval.clone()
-                        },
-                        _ => error_out!("Expected variable name")
-                    }
-                }
-                Token::LocalAssign => {
-                    let right_eval = execute(right, scope_id, memory, scopes)?;
-                    match (**left).clone() {
-                        ASTNode::Var { name } => {
-                            scopes.set_var_local(name, scope_id, memory, &right_eval);
-                            right_eval.clone()
-                        },
-                        _ => error_out!("Expected variable name")
-                    }
                 }
                 _ => todo!(),
             }
