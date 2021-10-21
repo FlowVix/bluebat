@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}};
+use std::{collections::{HashMap, HashSet}, io::{self, Write}};
 
 use crate::{errors::{BaseError}, lexer::Token, parser::ASTNode, value::Value};
 
@@ -274,6 +274,40 @@ pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory
 
 }
 
+enum VarExistence {
+    Name(String),
+    Id(RegIndex),
+}
+
+fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) 
+    -> Result<VarExistence,BaseError>
+{
+    match node {
+        ASTNode::Var { name } => match scopes.get_var_id(name.clone(), scope_id) {
+            Some(id) => Ok(VarExistence::Id(id)),
+            None => Ok(VarExistence::Name(name.clone())),
+        },
+        ASTNode::Index { base, index } => {
+            let i = match protecute!(index, scope_id, memory, scopes) {
+                Value::Number(value) => value.floor(),
+                _ => error_out!("Cannot index with type")
+            } as isize;
+            let base_id = get_value_id(base, scope_id, memory, scopes)?;
+            match base_id {
+                VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
+                VarExistence::Id(id) => match memory.get(id).clone() {
+                    Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
+                        error_out!("Index out of bounds")
+                    } else { Ok(VarExistence::Id(arr[i as usize])) },
+                    _ => error_out!("Type cannot be indexed"),
+                },
+            }
+        }
+        _ => error_out!("Expected variable name")
+    }
+}
+
+
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ValueResult {
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",memory,scope_id,scopes,node);
     //println!("{:?}", memory.protected);
@@ -282,7 +316,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
     memory.new_protected();
 
     let val = match node {
-        ASTNode::Value { value } => execute( value, scope_id, memory, scopes )?,
+        ASTNode::Value { value } => protecute!( value, scope_id, memory, scopes ),
         ASTNode::Num { value } => Value::Number(*value),
         ASTNode::Unary { op, value } => {
             let value = protecute!(value, scope_id, memory, scopes);
@@ -318,37 +352,43 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 }
                 
                 Token::PlusEq | Token::MinusEq | Token::MultEq | Token::DivEq | Token::ModEq | Token::PowEq  => {
-                    let right_eval = execute(right, scope_id, memory, scopes)?;
-                    match (**left).clone() {
-                        ASTNode::Var {name} => {
-                            let value = execute(left, scope_id, memory, scopes)?;
-                            let new_value = match op {
-                                Token::PlusEq => value.plus(&right_eval)?,
-                                Token::MinusEq => value.minus(&right_eval)?,
-                                Token::MultEq => value.mult(&right_eval)?,
-                                Token::DivEq => value.div(&right_eval)?,
-                                Token::ModEq => value.rem(&right_eval)?,
-                                Token::PowEq => value.pow(&right_eval)?,
-                                _ => unimplemented!(),
-                            };
-                            scopes.set_var(name, scope_id, memory, &new_value, true);
-                            new_value
-                        }
-                        _ => error_out!("Expected variable name")
-                    }
+                    let right_eval = protecute!(right, scope_id, memory, scopes);
+                    let value_id = match get_value_id(left, scope_id, memory, scopes)? {
+                        VarExistence::Id(id) => id,
+                        VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
+                    };
+                    let value = memory.register.get(&value_id).unwrap();
+                    let new_value = match op {
+                        Token::PlusEq => value.plus(&right_eval)?,
+                        Token::MinusEq => value.minus(&right_eval)?,
+                        Token::MultEq => value.mult(&right_eval)?,
+                        Token::DivEq => value.div(&right_eval)?,
+                        Token::ModEq => value.rem(&right_eval)?,
+                        Token::PowEq => value.pow(&right_eval)?,
+                        _ => unimplemented!(),
+                    };
+                    memory.set(new_value.clone(), value_id);
+                    new_value
                 },
                 Token::Assign => {
-                    let right_eval = execute(right, scope_id, memory, scopes)?;
-                    match (**left).clone() {
-                        ASTNode::Var { name } => {
+                    let right_eval = protecute!(right, scope_id, memory, scopes);
+                    match get_value_id(left, scope_id, memory, scopes)? {
+                        VarExistence::Id(id) => {
+                            let bubu = right_eval.clone();
+                            let gigi = id;
+                            println!("set {} to {:?}", gigi, bubu);
+                            io::stdout().flush().unwrap();
+                            memory.set(bubu, id);
+                            right_eval
+                        },
+                        VarExistence::Name(name) => {
                             scopes.set_var(name, scope_id, memory, &right_eval, true);
                             right_eval
                         },
-                        _ => error_out!("Expected variable name")
                     }
                 }
                 Token::LocalAssign => {
-                    let right_eval = execute(right, scope_id, memory, scopes)?;
+                    let right_eval = protecute!(right, scope_id, memory, scopes);
                     match (**left).clone() {
                         ASTNode::Var { name } => {
                             scopes.set_var_local(name, scope_id, memory, &right_eval);
@@ -359,22 +399,22 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 }
                 
                 Token::And => {
-                    if !execute(left, scope_id, memory, scopes)?.to_bool()? { 
+                    if !protecute!(left, scope_id, memory, scopes).to_bool()? { 
                         memory.pop_protected();
                         return Ok( Value::Bool(false) )
                     }
-                    if !execute(right, scope_id, memory, scopes)?.to_bool()? { 
+                    if !protecute!(right, scope_id, memory, scopes).to_bool()? { 
                         memory.pop_protected();
                         return Ok( Value::Bool(false) )
                     }
                     Value::Bool(true)
                 }
                 Token::Or => {
-                    if execute(left, scope_id, memory, scopes)?.to_bool()? { 
+                    if protecute!(left, scope_id, memory, scopes).to_bool()? { 
                         memory.pop_protected();
                         return Ok( Value::Bool(true) )
                     }
-                    if execute(right, scope_id, memory, scopes)?.to_bool()? { 
+                    if protecute!(right, scope_id, memory, scopes).to_bool()? { 
                         memory.pop_protected();
                         return Ok( Value::Bool(true) )
                     }
@@ -383,41 +423,43 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 _ => todo!(),
             }
         },
-        ASTNode::Var { name } => match scopes.get_var_id(name.clone(), scope_id) {
-            Some(id) => memory.register.get(&id).unwrap().clone(),
-            None => error_out!("Unknown variable"),
+        ASTNode::Var { name: _ } => {
+            match get_value_id(node, scope_id, memory, scopes)? {
+                VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
+                VarExistence::Id(id) => memory.register.get(&id).unwrap().clone(),
+            }
         },
         ASTNode::StatementList { statements } => {
             let mut last = Value::Null;
             for i in statements {
-                last = execute( i, scope_id, memory, scopes )?;
+                last = protecute!( i, scope_id, memory, scopes );
             }
             last
         },
         ASTNode::If { conds, if_none } => {
             for i in conds {
-                if execute(&i.0, scope_id, memory, scopes)?.to_bool()? {
+                if protecute!(&i.0, scope_id, memory, scopes).to_bool()? {
                     memory.pop_protected();
                     return Ok( execute(&i.1, derive_scope(scope_id, scope_id, scopes), memory, scopes)? )
                 }
             }
 
             match &**if_none {
-                Some(node) => execute(node, scope_id, memory, scopes)?,
+                Some(node) => protecute!(node, scope_id, memory, scopes),
                 None => Value::Null,
             }
         },
         ASTNode::While { cond, code } => {
             let mut last = Value::Null;
             loop {
-                if execute(cond, scope_id, memory, scopes)?.to_bool()? {
-                    last = execute(code, derive_scope(scope_id, scope_id, scopes), memory, scopes)?;
+                if protecute!(cond, scope_id, memory, scopes).to_bool()? {
+                    last = protecute!(code, derive_scope(scope_id, scope_id, scopes), memory, scopes);
                 } else { memory.pop_protected(); return Ok( last ) ; }
             }
         },
         ASTNode::Constant { value } => value.clone(),
         ASTNode::Block { code } =>
-            execute(code, derive_scope(scope_id, scope_id, scopes), memory, scopes)?,
+            protecute!(code, derive_scope(scope_id, scope_id, scopes), memory, scopes),
         ASTNode::Func { code, arg_names } => {
             Value::Function {arg_names: arg_names.clone(), code: code.clone(), scope_id}
         }
@@ -514,11 +556,11 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             Value::Array(eval_values)
         }
         ASTNode::Index { base, index } => {
-            let i = match execute(index, scope_id, memory, scopes)? {
+            let i = match protecute!(index, scope_id, memory, scopes) {
                 Value::Number(value) => value.floor(),
                 _ => error_out!("Cannot index with type")
             } as isize;
-            match execute(base, scope_id, memory, scopes)? {
+            match protecute!(base, scope_id, memory, scopes) {
                 Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
                     error_out!("Index out of bounds")
                 } else { memory.get(arr[i as usize]).clone()},

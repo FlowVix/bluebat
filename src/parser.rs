@@ -186,7 +186,7 @@ fn parse_term(tokens: &TokenList, pos: ParsePos) -> ParseResult {
             if !matches!(&tokens[pos], Token::RSqBracket) {
                 return Err(BaseError::ParseError("Expected ']'".to_string()));
             }
-            pos += 1; pos = skip_eol(tokens, pos);
+            pos += 1;
             value = ASTNode::Index { base: Box::new(value), index: Box::new(index) }
         } else {
             return Ok((value, pos))

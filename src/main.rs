@@ -29,7 +29,7 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
             if let Ok(result) = ass {
                 if print_result {
                     match result {
-                        Value::Null => (),
+                        Value::Null => print!("\r"),
                         _ => print!("{}",result.to_str(&memory))
                     }
                 }
@@ -37,7 +37,7 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
                 print!("{:?}",message);
             }
         },
-        Err(BaseError::ParseError(message)) => println!("{}",message),
+        Err(BaseError::ParseError(message)) => print!("{}",message),
         _ => unimplemented!(),
     }
     
@@ -60,7 +60,7 @@ fn main() {
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
     
-    if false {
+    if true {
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
         
