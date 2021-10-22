@@ -446,7 +446,14 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     }
                     Value::Bool(false)
                 }
-                _ => todo!(),
+                Token::As => {
+                    let left = protecute!(left, scope_id, memory, scopes);
+                    let right = protecute!(right, scope_id, memory, scopes);
+
+                    left.cast_to(&right, memory)?
+
+                }
+                _ => todo!()
             }
         },
         ASTNode::Var { name: _ } => {
@@ -525,7 +532,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                                 for i in args {
                                     strs.push( protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![]));
                                 }
-                                print!("{}",strs.join(" "));
+                                print!("{}",strs.join(""));
                             }
                             Value::Null
                         }
@@ -537,7 +544,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                                 for i in args {
                                     strs.push( protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![]));
                                 }
-                                println!("{}",strs.join(" "));
+                                println!("{}",strs.join(""));
                             }
                             Value::Null
                         }
@@ -550,6 +557,26 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                         "collect" => {
                             memory.collect(scopes, scope_id);
                             Value::Null
+                        }
+                        "input" => {
+                            if args.len() != 1 {error_out!("Expected 1 argument")}
+                            let mut converted_args: Vec<Value> = Vec::new();
+                            for i in args {
+                                converted_args.push( protecute!(i, scope_id, memory, scopes) );
+                            }
+                            print!("{}", format!("{}",converted_args[0].to_str(memory, &mut vec![])));
+                            io::stdout().flush().unwrap();
+
+                            let mut input_str = String::new();
+                            io::stdin()
+                                .read_line(&mut input_str)
+                                .expect("Failed to read line");
+                            
+                            Value::String(
+                                input_str
+                                    .replace("\r", "")
+                                    .replace("\n", "")
+                            )
                         }
                         _ => unimplemented!(),
                     }

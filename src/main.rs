@@ -61,6 +61,7 @@ fn main() {
     scopes.set_var_local("println".to_string(), 0, &mut memory, &Value::Builtin("println".to_string()));
     scopes.set_var_local("memtest".to_string(), 0, &mut memory, &Value::Builtin("memtest".to_string()));
     scopes.set_var_local("collect".to_string(), 0, &mut memory, &Value::Builtin("collect".to_string()));
+    scopes.set_var_local("input".to_string(), 0, &mut memory, &Value::Builtin("input".to_string()));
     
     if true {
         let input_str = fs::read_to_string("code.blb")

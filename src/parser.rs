@@ -45,6 +45,7 @@ const PRECEDENCES: &[Precedence] = &[
     Precedence {right_assoc: false, tok_check: ( |t| matches!(t, Token::Plus | Token::Minus )) },
     Precedence {right_assoc: false, tok_check: ( |t| matches!(t, Token::Mult | Token::Div | Token::Mod )) },
     Precedence {right_assoc: true, tok_check: ( |t| matches!(t, Token::Pow )) },
+    Precedence {right_assoc: false, tok_check: ( |t| matches!(t, Token::As )) },
 ];
 
 
@@ -60,6 +61,7 @@ fn parse_value(tokens: &TokenList, mut pos: ParsePos) -> ParseResult {
     match tok {
         Token::Number(value) => Ok((ASTNode::Value{ value: Value::Number(*value) }, pos + 1)),
         Token::StringLiteral(s) => Ok((ASTNode::Value{ value: Value::String(s.clone()) }, pos + 1)),
+        Token::TypeName(name) => Ok((ASTNode::Value{ value: Value::TypeName(name.clone()) }, pos + 1)),
         Token::Plus | Token::Minus | Token::Not => {
             let op = tok;
             destr!{!let value, pos from parse_op(tokens, pos + 1, PRECEDENCES.len() - 2)}

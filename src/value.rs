@@ -8,10 +8,11 @@ pub enum Value {
     Null,
     Number(f64),
     Bool(bool),
-    String(String), //not usable yet
+    String(String),
     Builtin(String),
     Function {arg_names: Vec<String>, code: Box<ASTNode>, scope_id: RegIndex},
     Array(Vec<RegIndex>),
+    TypeName(String),
 }
 
 impl Value {
@@ -22,6 +23,7 @@ impl Value {
             Value::Number(value) => value.to_string(),
             Value::Bool(value) => if *value { String::from("True") } else { String::from("False") },
             Value::String(value) => format!("{}",value),
+            Value::TypeName(name) => format!("#{}",name),
             Value::Builtin(name) => format!("<builtin: {}>", name),
             Value::Function { arg_names: _, code: _, scope_id: _ } => String::from("|...| {...}"),
             Value::Array(arr) => {
@@ -66,6 +68,28 @@ impl Value {
             _ => false
         }
     }
+    
+    pub fn cast_to(&self, other: &Value, memory: &Memory) -> ValueResult {
+        match (self, other) {
+            (Value::String(v), Value::TypeName(name)) => {
+                match &name[..] {
+                    "number" => match v.parse::<f64>() {
+                        Ok(n) => Ok(Value::Number(n)),
+                        Err(_) => Err(BaseError::InterpreterError("Couldn't convert string to number".to_string())),
+                    }
+                    "string" => Ok(Value::String(v.clone())),
+                    _ => Ok(Value::Number(3.0)),
+                }
+            }
+            (_, Value::TypeName(name)) => {
+                match &name[..] {
+                    "string" => Ok(Value::String(self.to_str(memory, &mut vec![]))),
+                    _ => Err(BaseError::InterpreterError("Couldn't convert".to_string()))
+                }
+            }
+            _ => Err(BaseError::InterpreterError("Casting not defined for types".to_string()))
+        }
+    }
 
     pub fn plus(&self, other: &Value) -> ValueResult {
         match (self, other) {
@@ -73,6 +97,12 @@ impl Value {
                 Ok(Value::Number( *v1 + v2 )),
             (Value::String(v1), Value::String(v2)) =>
                 Ok(Value::String( format!("{}{}",v1,v2) )),
+            (Value::Array(v1), Value::Array(v2)) =>
+                Ok(Value::Array( {
+                    let mut v = v1.to_vec();
+                    v.append(&mut v2.clone());
+                    v
+                } )),
             _ => Err(BaseError::InterpreterError("Operation '+' not defined for types".to_string()))
         }
     }

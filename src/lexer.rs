@@ -21,6 +21,10 @@ pub enum Token {
     )]
     StringLiteral(String),
 
+    
+    #[regex(r"#[a-zA-Z_][a-zA-Z_0-9]*", |lex| lex.slice()[1..].to_string())]
+    TypeName(String),
+
     #[token("+=")]
     PlusEq,
 
@@ -135,6 +139,8 @@ pub enum Token {
     Else,
     #[token("while")]
     While,
+    #[token("as")]
+    As,
 
     #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*", |lex| lex.slice().to_string())]
     Identifier(String),
