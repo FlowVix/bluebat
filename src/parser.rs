@@ -7,15 +7,13 @@ type TokenList = Vec<Token>;
 
 #[derive(Debug, Clone)]
 pub enum ASTNode {
-    Value {value: Box<ASTNode>},
     StatementList {statements: Vec<ASTNode>},
     Op {left: Box<ASTNode>, op: Token, right: Box<ASTNode>},
     Block {code: Box<ASTNode> },
     Call {base: Box<ASTNode>, args: Vec<ASTNode>},
-    Num {value: f64},
     Unary {op: Token, value: Box<ASTNode>},
     Var {name: String},
-    Constant {value: Value},
+    Value {value: Value},
     If {conds: Vec<(ASTNode,ASTNode)>, if_none: Box<Option<ASTNode>>},
     While {cond: Box<ASTNode>, code: Box<ASTNode>},
     Func {code: Box<ASTNode>, arg_names: Vec<String>},
@@ -60,7 +58,8 @@ fn skip_eol(tokens: &TokenList, mut pos: ParsePos) -> ParsePos {
 fn parse_value(tokens: &TokenList, mut pos: ParsePos) -> ParseResult {
     let tok = &tokens[pos];
     match tok {
-        Token::Number(value) => Ok((ASTNode::Num{ value: *value }, pos + 1)),
+        Token::Number(value) => Ok((ASTNode::Value{ value: Value::Number(*value) }, pos + 1)),
+        Token::StringLiteral(s) => Ok((ASTNode::Value{ value: Value::String(s.clone()) }, pos + 1)),
         Token::Plus | Token::Minus | Token::Not => {
             let op = tok;
             destr!{!let value, pos from parse_op(tokens, pos + 1, PRECEDENCES.len() - 2)}
@@ -74,9 +73,9 @@ fn parse_value(tokens: &TokenList, mut pos: ParsePos) -> ParseResult {
             Ok((value, pos + 1))
         },
         Token::Identifier(name) => Ok((ASTNode::Var{name: name.clone()}, pos + 1)),
-        Token::True => Ok((ASTNode::Constant{value: Value::Bool(true)}, pos + 1)),
-        Token::False => Ok((ASTNode::Constant{value: Value::Bool(false)}, pos + 1)),
-        Token::Null => Ok((ASTNode::Constant{value: Value::Null}, pos + 1)),
+        Token::True => Ok((ASTNode::Value{value: Value::Bool(true)}, pos + 1)),
+        Token::False => Ok((ASTNode::Value{value: Value::Bool(false)}, pos + 1)),
+        Token::Null => Ok((ASTNode::Value{value: Value::Null}, pos + 1)),
         Token::If => {
             let mut conds: Vec<(ASTNode, ASTNode)> = Vec::new();
 
@@ -273,6 +272,6 @@ pub fn parse(tokens: &TokenList) -> ParseResult {
         return Err(BaseError::ParseError("Expected end of file".to_string()))
     }
 
-    Ok((ASTNode::Value{value: Box::new(result)},pos))
+    Ok((result,pos))
 }
 

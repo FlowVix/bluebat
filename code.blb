@@ -1,11 +1,41 @@
 
 
+mag_sq = |z| z[0]^2 + z[1]^2
+sq = |z| [z[0]^2 - z[1]^2, 2*z[0]*z[1]]
+plus = |z1, z2| [z1[0] + z2[0], z1[1] + z2[1]]
 
-bruh = |x| x[0] += 1
+color = |x, y| {
+
+    c = [x / 60, y / 60 * 2]
+    z = [0, 0]
+    converges = True
+
+    counter = 0
+    while counter < 100 && converges {
+
+        z = plus(sq(z), c)
+        if mag_sq(z) >= 4 converges = False
+
+        counter += 1
+    }
+
+    converges
+
+}
+
+y = -25
+
+while y <= 25 {
+    x = -100
+    while x <= 100 {
+
+        print( if color(x, y) "O" else " " )
+
+        x += 1
+    }
+    println()
+    y += 1
+}
 
 
-haha = [68]
-print(haha)
-bruh(haha)
-print(haha)
 

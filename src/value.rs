@@ -21,7 +21,7 @@ impl Value {
             Value::Null => String::from("Null"),
             Value::Number(value) => value.to_string(),
             Value::Bool(value) => if *value { String::from("True") } else { String::from("False") },
-            Value::String(value) => format!("'{}'",value),
+            Value::String(value) => format!("{}",value),
             Value::Builtin(name) => format!("<builtin: {}>", name),
             Value::Function { arg_names: _, code: _, scope_id: _ } => String::from("|...| {...}"),
             Value::Array(arr) => {
@@ -71,6 +71,8 @@ impl Value {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 + v2 )),
+            (Value::String(v1), Value::String(v2)) =>
+                Ok(Value::String( format!("{}{}",v1,v2) )),
             _ => Err(BaseError::InterpreterError("Operation '+' not defined for types".to_string()))
         }
     }
@@ -85,6 +87,8 @@ impl Value {
         match (self, other) {
             (Value::Number(v1), Value::Number(v2)) =>
                 Ok(Value::Number( *v1 * v2 )),
+            (Value::String(v1), Value::Number(v2)) =>
+                Ok(Value::String( v1.repeat(*v2 as usize) )),
             _ => Err(BaseError::InterpreterError("Operation '*' not defined for types".to_string()))
         }
     }

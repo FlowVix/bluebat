@@ -1,11 +1,25 @@
 use logos::Logos;
 
 
+fn convert_string(s: &str) -> String {
+    s
+    
+        .replace("\r", "")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\\"", "\"")
+        .replace("\\'", "'")
+}
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
     #[regex(r"([0-9]+(\.[0-9]*)?|\.[0-9]*)", |lex| lex.slice().parse::<f64>())]
     Number(f64),
+
+    #[regex(r#""(?:\\.|[^\\"])*"|'(?:\\.|[^\\'])*'"#, 
+        |s| convert_string(&s.slice()[1..s.slice().len()-1])
+    )]
+    StringLiteral(String),
 
     #[token("+=")]
     PlusEq,

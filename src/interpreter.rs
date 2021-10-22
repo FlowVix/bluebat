@@ -24,6 +24,7 @@ pub struct Memory {
     counter: RegIndex,
     register: HashMap<RegIndex, Value>,
     protected: Vec<Vec<RegIndex>>,
+    last_amount: usize,
 }
 
 #[derive(Debug)]
@@ -82,7 +83,7 @@ fn get_value_references(
 
 impl Memory {
     pub fn new() -> Self {
-        return Memory {counter: 0, register: HashMap::new(), protected: Vec::new()};
+        return Memory {counter: 0, register: HashMap::new(), protected: Vec::new(), last_amount: 0};
     }
 
     pub fn add(&mut self, value: Value) -> RegIndex {
@@ -163,6 +164,7 @@ impl Memory {
         for i in tracker.marked_values {
             self.register.remove(&i);
         }
+        self.last_amount = self.register.len()
     }
 
     pub fn mark(&self, scopes: &mut ScopeList, scope_id: RegIndex, tracker: &mut CollectTracker) {
@@ -339,14 +341,13 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",memory,scope_id,scopes,node);
     //println!("{:?}", memory.protected);
     
-
-    memory.collect(scopes, scope_id);
+    if memory.register.len() > 50000 + memory.last_amount {
+        memory.collect(scopes, scope_id);
+    }
 
     memory.new_protected();
 
     let val = match node {
-        ASTNode::Value { value } => protecute!( value, scope_id, memory, scopes ),
-        ASTNode::Num { value } => Value::Number(*value),
         ASTNode::Unary { op, value } => {
             let value = protecute!(value, scope_id, memory, scopes);
             match op {
@@ -482,7 +483,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 } else { memory.pop_protected(); return Ok( last ) ; }
             }
         },
-        ASTNode::Constant { value } => value.clone(),
+        ASTNode::Value { value } => value.clone(),
         ASTNode::Block { code } =>
             protecute!(code, derive_scope(scope_id, scope_id, scopes), memory, scopes),
         ASTNode::Func { code, arg_names } => {
@@ -520,11 +521,11 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             if args.len() == 0 {
                                 print!("");
                             } else {
-                                let mut s = String::from("");
+                                let mut strs = Vec::new();
                                 for i in args {
-                                    s.push_str( &format!("{} ", protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![])) );
+                                    strs.push( protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![]));
                                 }
-                                print!("{}",s);
+                                print!("{}",strs.join(" "));
                             }
                             Value::Null
                         }
@@ -532,11 +533,11 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             if args.len() == 0 {
                                 println!("");
                             } else {
-                                let mut s = String::from("");
+                                let mut strs = Vec::new();
                                 for i in args {
-                                    s.push_str( &format!("{} ", protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![])) );
+                                    strs.push( protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![]));
                                 }
-                                println!("{}",s);
+                                println!("{}",strs.join(" "));
                             }
                             Value::Null
                         }

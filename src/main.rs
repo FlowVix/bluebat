@@ -17,6 +17,11 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
         .collect::<Vec<lexer::Token>>();
     tokens.push(Token::Eol);
     tokens.push(Token::Eof);
+    /*
+    for i in &tokens {
+        println!("{:?}",i);
+    }
+    */
     
     let tree = parser::parse(&tokens);
 
@@ -45,9 +50,6 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
 
 fn main() {
     print!("\x1B[2J\x1B[1;1H");
-    if false {
-        print!("{:?}",Value::String(String::from("ass")))
-    }
 
     let mut memory = Memory::new();
     let mut scopes = ScopeList::new();
@@ -65,11 +67,11 @@ fn main() {
             .expect("Something went wrong reading the file");
         
         run(input_str, &mut memory, &mut scopes, false);
-        print!("\n");
+        print!("\n\n");
     } else {
 
         print!("
-BlueBat v0.2.0 Console
+BlueBat v0.2.5 Console
 --------------------------- 
 
 ");
