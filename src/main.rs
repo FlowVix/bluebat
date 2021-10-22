@@ -30,7 +30,7 @@ fn run(code: String, memory: &mut Memory, scopes: &mut ScopeList, print_result: 
                 if print_result {
                     match result {
                         Value::Null => print!("\r"),
-                        _ => print!("{}",result.to_str(&memory))
+                        _ => print!("{}",result.to_str(&memory, &mut vec![]))
                     }
                 }
             } else if let Err(BaseError::InterpreterError(message)) = ass {

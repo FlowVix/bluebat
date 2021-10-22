@@ -1,6 +1,11 @@
 
 
 
-a = [1,2,3]
-a[2] = [1,2]
-print(a)
+bruh = |x| x[0] += 1
+
+
+haha = [68]
+print(haha)
+bruh(haha)
+print(haha)
+

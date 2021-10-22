@@ -55,21 +55,28 @@ impl CollectTracker {
     }
 }
 
-fn get_value_references(value: &Value, memory: &Memory, scopes: &ScopeList) -> (Vec<RegIndex>, Vec<RegIndex>) {
+fn get_value_references(
+    value: &Value,
+    memory: &Memory,
+    scopes: &ScopeList,
+    value_ids: &mut Vec<RegIndex>,
+    scope_ids: &mut Vec<RegIndex>
+) {
     match value {
-        Value::Function { arg_names: _, code: _, scope_id } => (vec![], vec![*scope_id]),
-        Value::Array (arr) => {
-            let mut res_value_ids = Vec::new();
-            let mut res_scope_ids = Vec::new();
-            for i in arr {
-                res_value_ids.push(*i);
-                let (mut value_ids, mut scope_ids) = get_value_references(memory.register.get(i).unwrap(), memory, scopes);
-                res_value_ids.append(&mut value_ids);
-                res_scope_ids.append(&mut scope_ids);
+        Value::Function { arg_names: _, code: _, scope_id } => {
+            if !scope_ids.contains(scope_id) {
+                scope_ids.push(*scope_id);
             }
-            (res_value_ids, res_scope_ids)
+        },
+        Value::Array (arr) => {
+            for i in arr {
+                if !value_ids.contains(i) {
+                    value_ids.push(*i);
+                    get_value_references(memory.register.get(i).unwrap(), memory, scopes, value_ids, scope_ids);
+                }
+            }
         }
-        _ => (vec![], vec![])
+        _ => (),
     }
 }
 
@@ -120,21 +127,32 @@ impl Memory {
 
     pub fn collect(&mut self, scopes: &mut ScopeList, scope_id: RegIndex) {
         let mut tracker = CollectTracker::new(self, scopes);
+        
+        //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",self,scope_id,scopes,tracker);
+        io::stdout().flush().unwrap();
+
         self.mark(scopes, scope_id, &mut tracker);
-        //println!("{:#?}",tracker);
+
         for vec in &self.protected {
             for var_id in vec {
-                //println!("{:#?}",var_id);
-                tracker.marked_values.remove(var_id);
-                let (value_ids, scope_ids) = get_value_references(self.register.get(&var_id).unwrap(), self, scopes);
-                //println!("{:?}; {:?}",value_ids, scope_ids);
-                for i in scope_ids {
-                    if tracker.marked_scopes.contains(&i) {
-                        self.mark(scopes, i, &mut tracker);
+                if tracker.marked_values.contains(&var_id) {
+                    tracker.marked_values.remove(var_id);
+                    let mut value_ids: Vec<RegIndex> = Vec::new();
+                    let mut scope_ids: Vec<RegIndex> = Vec::new();
+                    get_value_references(
+                        self.register.get(&var_id).unwrap(),
+                        self, scopes,
+                        &mut value_ids,
+                        &mut scope_ids,
+                    );
+                    for i in scope_ids {
+                        if tracker.marked_scopes.contains(&i) {
+                            self.mark(scopes, i, &mut tracker);
+                        }
                     }
-                }
-                for i in value_ids {
-                    tracker.marked_values.remove(&i);
+                    for i in value_ids {
+                        tracker.marked_values.remove(&i);
+                    }
                 }
             }
         }
@@ -154,25 +172,34 @@ impl Memory {
             var_check_ids.push(*var_id);
         }
         for var_id in var_check_ids {
-            tracker.marked_values.remove(&var_id);
-            let (value_ids, scope_ids) = get_value_references (self.register.get(&var_id).unwrap(), self, scopes);
-            for i in scope_ids {
-                if tracker.marked_scopes.contains(&i) {
-                    self.mark(scopes, i, tracker);
+            if tracker.marked_values.contains(&var_id) {
+                tracker.marked_values.remove(&var_id);
+                let mut value_ids: Vec<RegIndex> = Vec::new();
+                let mut scope_ids: Vec<RegIndex> = Vec::new();
+                get_value_references(
+                    self.register.get(&var_id).unwrap(),
+                    self, scopes,
+                    &mut value_ids,
+                    &mut scope_ids,
+                );
+                for i in scope_ids {
+                    if tracker.marked_scopes.contains(&i) {
+                        self.mark(scopes, i, tracker);
+                    }
                 }
-            }
-            for i in value_ids {
-                tracker.marked_values.remove(&i);
+                for i in value_ids {
+                    tracker.marked_values.remove(&i);
+                }
             }
         }
         let parent_id = scopes.register.get(&scope_id).unwrap().parent_id;
         match parent_id {
-            Some(id) => self.mark(scopes, id, tracker),
+            Some(id) => if tracker.marked_scopes.contains(&id) { self.mark(scopes, id, tracker) },
             None => (),
         }
         let caller_id = scopes.register.get(&scope_id).unwrap().caller_id;
         match caller_id {
-            Some(id) => self.mark(scopes, id, tracker),
+            Some(id) => if tracker.marked_scopes.contains(&id) { self.mark(scopes, id, tracker) },
             None => (),
         }
     }
@@ -311,6 +338,8 @@ fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes:
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ValueResult {
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",memory,scope_id,scopes,node);
     //println!("{:?}", memory.protected);
+    
+
     memory.collect(scopes, scope_id);
 
     memory.new_protected();
@@ -374,11 +403,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     let right_eval = protecute!(right, scope_id, memory, scopes);
                     match get_value_id(left, scope_id, memory, scopes)? {
                         VarExistence::Id(id) => {
-                            let bubu = right_eval.clone();
-                            let gigi = id;
-                            println!("set {} to {:?}", gigi, bubu);
-                            io::stdout().flush().unwrap();
-                            memory.set(bubu, id);
+                            memory.set(right_eval.clone(), id);
                             right_eval
                         },
                         VarExistence::Name(name) => {
@@ -497,7 +522,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             } else {
                                 let mut s = String::from("");
                                 for i in args {
-                                    s.push_str( &format!("{} ", execute(i, scope_id, memory, scopes)?.to_str(memory)) );
+                                    s.push_str( &format!("{} ", protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![])) );
                                 }
                                 print!("{}",s);
                             }
@@ -509,7 +534,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             } else {
                                 let mut s = String::from("");
                                 for i in args {
-                                    s.push_str( &format!("{} ", execute(i, scope_id, memory, scopes)?.to_str(memory)) );
+                                    s.push_str( &format!("{} ", protecute!(i, scope_id, memory, scopes).to_str(memory, &mut vec![])) );
                                 }
                                 println!("{}",s);
                             }
@@ -518,7 +543,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                         "memtest" => {
                             println!("{:#?}",memory);
                             println!("{:#?}",scopes);
-                            
+                            io::stdout().flush().unwrap();
                             Value::Null
                         }
                         "collect" => {
