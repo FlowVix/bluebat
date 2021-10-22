@@ -374,7 +374,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                         Token::GreaterEq => left.greq(&right)?,
                         Token::Lesser => left.sm(&right)?,
                         Token::LesserEq => left.smeq(&right)?,
-                        Token::Eq => left.eq(&right)?,
+                        Token::Eq => left.eq(&right, memory)?,
                         Token::NotEq => left.neq(&right)?,
                         _ => unimplemented!(),
                     }
@@ -617,6 +617,9 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
                     error_out!("Index out of bounds")
                 } else { memory.get(arr[i as usize]).clone()},
+                Value::String(s) => if i >= s.chars().count() as isize || i < 0 {
+                    error_out!("String index out of bounds")
+                } else { Value::String( s.chars().nth(i as usize).unwrap().to_string() ) },
                 _ => error_out!("Type cannot be indexed")
             }
         }

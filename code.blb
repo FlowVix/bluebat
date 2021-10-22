@@ -1,10 +1,9 @@
 
 
 
-a = input("Enter the first number: ") as #number
-b = input("Enter the second number: ") as #number
+print("ඞ" + "ඞ")
 
-println("Their sum is " + (a + b) as #string + ", holy shit!")
-println("Their sum is ", a + b, ", holy shit!")
+
+
 
 

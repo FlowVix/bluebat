@@ -142,7 +142,7 @@ pub enum Token {
     #[token("as")]
     As,
 
-    #[regex(r"[a-zA-Z_][a-zA-Z_0-9]*", |lex| lex.slice().to_string())]
+    #[regex(r"[a-zA-Z_ඞ][a-zA-Z_0-9ඞ]*", |lex| lex.slice().to_string())]
     Identifier(String),
 
     #[error]

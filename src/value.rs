@@ -163,12 +163,26 @@ impl Value {
     }
 
     
-    pub fn eq(&self, other: &Value) -> ValueResult {
+    pub fn eq(&self, other: &Value, memory: &Memory) -> ValueResult {
         match (self, other) {
             (Value::Null, Value::Null) => Ok(Value::Bool( true )),
             (Value::Number(v1), Value::Number(v2)) => Ok(Value::Bool( *v1 == *v2 )),
             (Value::Bool(v1), Value::Bool(v2)) => Ok(Value::Bool( *v1 == *v2 )),
             (Value::String(v1), Value::String(v2)) => Ok(Value::Bool( *v1 == *v2 )),
+            (Value::TypeName(v1), Value::TypeName(v2)) => Ok(Value::Bool( *v1 == *v2 )),
+            (Value::Array(arr1), Value::Array(arr2)) => {
+                if arr1.len() != arr2.len() { return Ok(Value::Bool(false)) }
+                for (i, j) in arr1.iter().zip(arr2.iter()) {
+                    if *i == *j {
+                        continue
+                    } else {
+                        let a = memory.get(*i);
+                        let b = memory.get(*j);
+                        if !a.internal_equal(b, memory) { return Ok(Value::Bool(false)) }
+                    }
+                }
+                Ok(Value::Bool(true))
+            },
             _ => Err(BaseError::InterpreterError("Operation '==' not defined for types".to_string()))
         }
     }
