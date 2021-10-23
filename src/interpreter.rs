@@ -400,6 +400,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 crate::lexer::Token::Plus => value.give()?,
                 crate::lexer::Token::Minus => value.neg()?,
                 crate::lexer::Token::Not => value.not()?,
+                crate::lexer::Token::Range => error_out!("spreads not added yet lol peepeepoopoo"),
                 _ => error_out!("Non '+','-','!' unary operation")
             }
         },

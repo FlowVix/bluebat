@@ -87,7 +87,7 @@ BlueBat v0.2.5 Console
                 .read_line(&mut input_str)
                 .expect("Failed to read line");
             
-            let input_str = format!("{}{}",&input_str[..input_str.len()-2],"\n");
+            let input_str = format!("{}{}",input_str.replace("\r", ""),"\n");
     
             run(input_str, &mut memory, &mut scopes, true);
             
