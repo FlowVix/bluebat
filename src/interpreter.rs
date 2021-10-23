@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, io::{self, Write}};
+use std::{collections::{HashMap, HashSet}, hash::Hash, io::{self, Write}};
 
 use crate::{errors::{BaseError}, lexer::Token, parser::ASTNode, value::Value};
 
@@ -303,9 +303,11 @@ pub fn start_execute(node: &ASTNode, scopes: &mut ScopeList, memory: &mut Memory
 
 }
 
+#[derive(PartialEq, Eq, Hash, Debug)]
 enum VarExistence {
     Name(String),
     Id(RegIndex),
+    IdErr{id: RegIndex, err: String},
 }
 
 fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) 
@@ -322,28 +324,72 @@ fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes:
                 _ => error_out!("Cannot index with type")
             } as isize;
             let base_id = get_value_id(base, scope_id, memory, scopes)?;
-            match base_id {
+            let base_value = match base_id {
                 VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
-                VarExistence::Id(id) => match memory.get(id).clone() {
-                    Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
-                        error_out!("Index out of bounds")
-                    } else { Ok(VarExistence::Id(arr[i as usize])) },
-                    _ => error_out!("Type cannot be indexed"),
-                },
+                VarExistence::Id(id) => memory.get(id).clone(),
+                VarExistence::IdErr { id , err: _} => memory.register.get(&id).unwrap().clone(),
+            };
+            match base_value {
+
+                Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
+                    error_out!("Index out of bounds")
+                } else { Ok(VarExistence::Id(arr[i as usize])) },
+
+                Value::String(s) => if i >= s.chars().count() as isize || i < 0 {
+                    error_out!("String index out of bounds")
+                } else { Ok(VarExistence::IdErr{
+                    id: memory.add( Value::String(s.chars().nth(i as usize).unwrap().to_string()) ),
+                    err: "Can't assign to string index".to_string()
+                }   ) },
+                
+                _ => error_out!("Type cannot be indexed"),
             }
         }
         _ => error_out!("Expected variable name")
     }
 }
+#[derive(Debug)]
+enum DestructureValue {
+    Single(RegIndex),
+    Spread(Vec<RegIndex>),
+}
 
+
+type DestructureMap = HashMap<VarExistence, DestructureValue>;
+
+fn assign(left: &ASTNode, right: &ASTNode, map: &mut DestructureMap, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> Result<usize, BaseError> {
+    match left {
+        ASTNode::Array { values: l_values } => {
+            match right {
+                ASTNode::Array { values: r_values } => {
+                    if l_values.len() != r_values.len() {
+                        error_out!(format!("Inequal amount of values to destructure, expected {}", l_values.len()))
+                    }
+                    for (i, j) in l_values.iter().zip(r_values.iter()) {
+                        assign(i, j, map, scope_id, memory, scopes)?;
+                    }
+                },
+                _ => error_out!("Cannot destructure non-array")
+            }
+            Ok(0)
+        },
+        _ => {
+            let right_id = protecute_id!(right, scope_id, memory, scopes);
+            map.insert(
+                get_value_id(left, scope_id, memory, scopes)?
+            , DestructureValue::Single(right_id));
+            Ok(0)
+        }
+    }
+}
 
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ValueResult {
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",memory,scope_id,scopes,node);
     //println!("{:?}", memory.protected);
     
-    if memory.register.len() > 50000 + memory.last_amount {
+    //if memory.register.len() > 50000 + memory.last_amount {
         memory.collect(scopes, scope_id);
-    }
+    //}
 
     memory.new_protected();
 
@@ -386,6 +432,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     let value_id = match get_value_id(left, scope_id, memory, scopes)? {
                         VarExistence::Id(id) => id,
                         VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
+                        VarExistence::IdErr { id: _, err } => error_out!(err),
                     };
                     let value = memory.register.get(&value_id).unwrap();
                     let new_value = match op {
@@ -401,17 +448,22 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                     new_value
                 },
                 Token::Assign => {
+                    let mut map = HashMap::new();
                     let right_eval = protecute!(right, scope_id, memory, scopes);
-                    match get_value_id(left, scope_id, memory, scopes)? {
-                        VarExistence::Id(id) => {
-                            memory.set(right_eval.clone(), id);
-                            right_eval
-                        },
-                        VarExistence::Name(name) => {
-                            scopes.set_var(name, scope_id, memory, &right_eval, true);
-                            right_eval
-                        },
+                    assign(left, right, &mut map, scope_id, memory, scopes)?;
+
+                    for (var, d_val) in map {
+                        let value = match d_val {
+                            DestructureValue::Single(id) => memory.register.get(&id).unwrap().clone(),
+                            DestructureValue::Spread(id_arr) => Value::Array(id_arr),
+                        };
+                        match var {
+                            VarExistence::Id(id) => memory.set(value.clone(), id),
+                            VarExistence::Name(name) => {scopes.set_var(name, scope_id, memory, &value, true);},
+                            VarExistence::IdErr { id: _, err } => error_out!(err),
+                        }
                     }
+                    right_eval
                 }
                 Token::LocalAssign => {
                     let right_eval = protecute!(right, scope_id, memory, scopes);
@@ -460,6 +512,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             match get_value_id(node, scope_id, memory, scopes)? {
                 VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
                 VarExistence::Id(id) => memory.register.get(&id).unwrap().clone(),
+                _ => error_out!("if you get this error lemme know wtf ur code was")
             }
         },
         ASTNode::StatementList { statements } => {
@@ -578,6 +631,14 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                                     .replace("\n", "")
                             )
                         }
+                        "len" => {
+                            if args.len() != 1 {error_out!("Expected 1 argument")}
+                            let mut converted_args: Vec<Value> = Vec::new();
+                            for i in args {
+                                converted_args.push( protecute!(i, scope_id, memory, scopes) );
+                            }
+                            converted_args[0].len()?
+                        }
                         _ => unimplemented!(),
                     }
                 }
@@ -608,19 +669,11 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             }
             Value::Array(eval_values)
         }
-        ASTNode::Index { base, index } => {
-            let i = match protecute!(index, scope_id, memory, scopes) {
-                Value::Number(value) => value.floor(),
-                _ => error_out!("Cannot index with type")
-            } as isize;
-            match protecute!(base, scope_id, memory, scopes) {
-                Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
-                    error_out!("Index out of bounds")
-                } else { memory.get(arr[i as usize]).clone()},
-                Value::String(s) => if i >= s.chars().count() as isize || i < 0 {
-                    error_out!("String index out of bounds")
-                } else { Value::String( s.chars().nth(i as usize).unwrap().to_string() ) },
-                _ => error_out!("Type cannot be indexed")
+        ASTNode::Index { base: _, index: _ } => {
+            match get_value_id(node, scope_id, memory, scopes)? {
+                VarExistence::Id(id) => memory.register.get(&id).unwrap().clone(),
+                VarExistence::IdErr { id, err: _ } => memory.register.get(&id).unwrap().clone(),
+                _ => error_out!("if you get this error lemme know wtf ur code was")
             }
         }
     };

@@ -18,7 +18,7 @@ pub enum ASTNode {
     While {cond: Box<ASTNode>, code: Box<ASTNode>},
     Func {code: Box<ASTNode>, arg_names: Vec<String>},
     Array {values: Vec<ASTNode>},
-    Index {base: Box<ASTNode>, index: Box<ASTNode>}
+    Index {base: Box<ASTNode>, index: Box<ASTNode>},
 }
 
 struct Precedence {
@@ -62,7 +62,7 @@ fn parse_value(tokens: &TokenList, mut pos: ParsePos) -> ParseResult {
         Token::Number(value) => Ok((ASTNode::Value{ value: Value::Number(*value) }, pos + 1)),
         Token::StringLiteral(s) => Ok((ASTNode::Value{ value: Value::String(s.clone()) }, pos + 1)),
         Token::TypeName(name) => Ok((ASTNode::Value{ value: Value::TypeName(name.clone()) }, pos + 1)),
-        Token::Plus | Token::Minus | Token::Not => {
+        Token::Plus | Token::Minus | Token::Not | Token::Range => {
             let op = tok;
             destr!{!let value, pos from parse_op(tokens, pos + 1, PRECEDENCES.len() - 2)}
             Ok((ASTNode::Unary{op: op.clone(), value: Box::new(value)}, pos))

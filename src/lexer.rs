@@ -124,6 +124,12 @@ pub enum Token {
 
     #[token("&&")]
     And,
+    
+    #[token("..")]
+    Range,
+
+    #[token(".")]
+    Dot,
 
     #[token("True")]
     True,

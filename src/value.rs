@@ -90,6 +90,13 @@ impl Value {
             _ => Err(BaseError::InterpreterError("Casting not defined for types".to_string()))
         }
     }
+    pub fn len(&self) -> ValueResult {
+        match self {
+            Value::Array(v) => Ok(Value::Number(v.len() as f64)),
+            Value::String(v) => Ok(Value::Number(v.chars().count() as f64)),
+            _ => Err(BaseError::InterpreterError("Cannot get length of type".to_string()))
+        }
+    }
 
     pub fn plus(&self, other: &Value) -> ValueResult {
         match (self, other) {
