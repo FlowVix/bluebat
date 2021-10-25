@@ -64,7 +64,7 @@ fn main() {
     scopes.set_var_local("input".to_string(), 0, &mut memory, &Value::Builtin("input".to_string()));
     scopes.set_var_local("len".to_string(), 0, &mut memory, &Value::Builtin("len".to_string()));
     
-    if false {
+    if true {
         let input_str = fs::read_to_string("code.blb")
             .expect("Something went wrong reading the file");
         

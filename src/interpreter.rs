@@ -310,7 +310,7 @@ enum VarExistence {
     IdErr{id: RegIndex, err: String},
 }
 
-fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) 
+fn get_value_id(node: &ASTNode, assign: bool, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) 
     -> Result<VarExistence,BaseError>
 {
     match node {
@@ -323,12 +323,13 @@ fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes:
                 Value::Number(value) => value.floor(),
                 _ => error_out!("Cannot index with type")
             } as isize;
-            let base_id = get_value_id(base, scope_id, memory, scopes)?;
+            let base_id = get_value_id(base, assign, scope_id, memory, scopes)?;
             let base_value = match base_id {
                 VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
                 VarExistence::Id(id) => memory.get(id).clone(),
                 VarExistence::IdErr { id , err: _} => memory.register.get(&id).unwrap().clone(),
             };
+            //println!("{:#?}",base_value);
             match base_value {
 
                 Value::Array(arr) => if i >= arr.len() as isize || i < 0 {
@@ -345,7 +346,7 @@ fn get_value_id(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes:
                 _ => error_out!("Type cannot be indexed"),
             }
         }
-        _ => error_out!("Expected variable name")
+        _ => Ok(VarExistence::Id( protecute_id!(node, scope_id, memory, scopes) )),
     }
 }
 #[derive(Debug)]
@@ -357,40 +358,107 @@ enum DestructureValue {
 
 type DestructureMap = HashMap<VarExistence, DestructureValue>;
 
-fn assign(left: &ASTNode, right: &ASTNode, map: &mut DestructureMap, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> Result<usize, BaseError> {
+fn assign(left: &ASTNode, right_id: RegIndex, map: &mut DestructureMap, spread: bool, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> Result<usize, BaseError> {
+    
     match left {
         ASTNode::Array { values: l_values } => {
-            match right {
-                ASTNode::Array { values: r_values } => {
-                    if l_values.len() != r_values.len() {
-                        error_out!(format!("Inequal amount of values to destructure, expected {}", l_values.len()))
+            match memory.get(right_id).clone() {
+                Value::Array(r_values) => {
+                    let mut spreads = Vec::new();
+                    let mut spread_values = Vec::new();
+                    let mut spread_vars: usize = 0;
+                    for i in l_values {
+                        match i {
+                            ASTNode::Unary { op: Token::Range, value: v } => { spreads.push(true); spread_values.push(&**v); spread_vars += 1 },
+                            _ => { spreads.push(false) },
+                        }
                     }
-                    for (i, j) in l_values.iter().zip(r_values.iter()) {
-                        assign(i, j, map, scope_id, memory, scopes)?;
+                    if spread_vars > 0 {
+                        //println!("{:?} {:?}     {:?}",l_values.len(),spreads.len(),r_values.len());
+                        if l_values.len() - spread_vars > r_values.len() {
+                            error_out!(format!("Not enough values to destructure, expected at least {}", l_values.len() - spreads.len()))
+                        }
+                        let mut spread_lengths = Vec::new();
+                        let spread_amount = r_values.len() - (l_values.len() - spread_vars);
+                        let modulo = spread_amount % spread_vars;
+                        //println!("{:?} {:?}",spread_amount,modulo);
+                        for i in 0..spread_vars {
+                            spread_lengths.push(
+                                spread_amount / spread_vars + if i < modulo {1} else {0}
+                            )
+                        }
+                        //println!("{:?}",spread_lengths);
+                        let mut current_r_value: usize = 0;
+                        let mut current_spread: usize = 0;
+                        for (i, s) in spreads.iter().enumerate() {
+                            if *s {
+                                if spread_lengths[current_spread] == 0 {
+                                    let left_id = get_value_id(
+                                        spread_values.get(current_spread).unwrap()
+                                        , false, scope_id, memory, scopes
+                                    )?;
+                                    match map.get_mut(&left_id) {
+                                        None | Some(DestructureValue::Single(_)) => { map.insert(
+                                            left_id
+                                        , DestructureValue::Spread(vec![])); },
+                                        _ => (),
+                                    }
+                                } else {
+                                    for _ in 0..spread_lengths[current_spread] {
+                                        assign(spread_values.get(current_spread).unwrap(), *r_values.get(current_r_value).unwrap(), map, true, scope_id, memory, scopes)?;
+                                        current_r_value += 1
+                                    }
+                                }
+                                current_spread += 1
+                            } else {
+                                assign(l_values.get(i).unwrap(), *r_values.get(current_r_value).unwrap(), map, spread, scope_id, memory, scopes)?;
+                                current_r_value += 1
+                            }
+                        }
+
+                    } else {
+                        if l_values.len() != r_values.len() {
+                            error_out!(format!("Inequal amount of values to destructure, expected {}", l_values.len()))
+                        }
+                        for (i, j) in l_values.iter().zip(r_values.iter()) {
+                            assign(i, *j, map, spread, scope_id, memory, scopes)?;
+                        }
                     }
+                    
+                    
                 },
                 _ => error_out!("Cannot destructure non-array")
             }
-            Ok(0)
         },
         _ => {
-            let right_id = protecute_id!(right, scope_id, memory, scopes);
-            map.insert(
-                get_value_id(left, scope_id, memory, scopes)?
-            , DestructureValue::Single(right_id));
-            Ok(0)
+            let left_id = get_value_id(left, false, scope_id, memory, scopes)?;
+            if !spread {
+                map.insert(
+                    left_id
+                , DestructureValue::Single(right_id));
+            } else {
+                match map.get_mut(&left_id) {
+                    None | Some(DestructureValue::Single(_)) => { map.insert(
+                        left_id
+                    , DestructureValue::Spread(vec![right_id])); },
+                    Some(DestructureValue::Spread(v)) => { v.push(right_id) }
+                }
+            }
         }
     }
+    Ok(0)
+
 }
 
 fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut ScopeList) -> ValueResult {
     //println!("\n\n{:#?}\nscope_id: {},\n{:#?}\n{:#?}",memory,scope_id,scopes,node);
     //println!("{:?}", memory.protected);
     
-    //if memory.register.len() > 50000 + memory.last_amount {
+    if memory.register.len() > 50000 + memory.last_amount {
         memory.collect(scopes, scope_id);
-    //}
+    }
 
+    //println!("{:?}",node);
     memory.new_protected();
 
     let val = match node {
@@ -430,7 +498,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 
                 Token::PlusEq | Token::MinusEq | Token::MultEq | Token::DivEq | Token::ModEq | Token::PowEq  => {
                     let right_eval = protecute!(right, scope_id, memory, scopes);
-                    let value_id = match get_value_id(left, scope_id, memory, scopes)? {
+                    let value_id = match get_value_id(left, true, scope_id, memory, scopes)? {
                         VarExistence::Id(id) => id,
                         VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
                         VarExistence::IdErr { id: _, err } => error_out!(err),
@@ -450,8 +518,8 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                 },
                 Token::Assign => {
                     let mut map = HashMap::new();
-                    let right_eval = protecute!(right, scope_id, memory, scopes);
-                    assign(left, right, &mut map, scope_id, memory, scopes)?;
+                    let right_eval_id = protecute_id!(right, scope_id, memory, scopes);
+                    assign(left, right_eval_id, &mut map, false, scope_id, memory, scopes)?;
 
                     for (var, d_val) in map {
                         let value = match d_val {
@@ -464,7 +532,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
                             VarExistence::IdErr { id: _, err } => error_out!(err),
                         }
                     }
-                    right_eval
+                    memory.get(right_eval_id).clone()
                 }
                 Token::LocalAssign => {
                     let right_eval = protecute!(right, scope_id, memory, scopes);
@@ -510,7 +578,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             }
         },
         ASTNode::Var { name: _ } => {
-            match get_value_id(node, scope_id, memory, scopes)? {
+            match get_value_id(node, false, scope_id, memory, scopes)? {
                 VarExistence::Name(name) => error_out!(format!("Unknown variable {}", name)),
                 VarExistence::Id(id) => memory.register.get(&id).unwrap().clone(),
                 _ => error_out!("if you get this error lemme know wtf ur code was")
@@ -671,7 +739,7 @@ fn execute(node: &ASTNode, scope_id: RegIndex, memory: &mut Memory, scopes: &mut
             Value::Array(eval_values)
         }
         ASTNode::Index { base: _, index: _ } => {
-            match get_value_id(node, scope_id, memory, scopes)? {
+            match get_value_id(node, false, scope_id, memory, scopes)? {
                 VarExistence::Id(id) => memory.register.get(&id).unwrap().clone(),
                 VarExistence::IdErr { id, err: _ } => memory.register.get(&id).unwrap().clone(),
                 _ => error_out!("if you get this error lemme know wtf ur code was")
